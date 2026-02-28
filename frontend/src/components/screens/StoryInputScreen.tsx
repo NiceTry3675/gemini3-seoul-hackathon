@@ -70,24 +70,22 @@ export default function StoryInputScreen({
                 <button
                   type="button"
                   onClick={() => onInputModeChange('summary')}
-                  className={`rounded px-3 py-1.5 transition-colors ${
-                    inputMode === 'summary'
-                      ? 'bg-[#2b6cee] text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                  className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'summary'
+                    ? 'bg-[#2b6cee] text-white'
+                    : 'text-slate-400 hover:text-slate-200'
+                    }`}
                 >
-                  요약 (Summary)
+                  Summary
                 </button>
                 <button
                   type="button"
                   onClick={() => onInputModeChange('original')}
-                  className={`rounded px-3 py-1.5 transition-colors ${
-                    inputMode === 'original'
-                      ? 'bg-[#2b6cee] text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                  className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'original'
+                    ? 'bg-[#2b6cee] text-white'
+                    : 'text-slate-400 hover:text-slate-200'
+                    }`}
                 >
-                  원문 (Original)
+                  Original
                 </button>
               </div>
             </div>

@@ -229,3 +229,6 @@ sketch
 # Auto Claude data directory
 .auto-claude/
 .omc/
+
+# SQLite storage
+backend/storage/

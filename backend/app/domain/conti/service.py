@@ -253,3 +253,32 @@ class ContiOrchestratorService:
             ))
 
         return GenerateMediaResponse(cuts=generated_cuts)
+
+    async def generate_and_persist(
+        self, request: ContiRequest, run_id: str, repo: "PipelineRepository"
+    ) -> AsyncGenerator[dict, None]:
+        from app.domain.conti.repository import PipelineRepository  # noqa: F811
+
+        result_saved = False
+        try:
+            async for event in self.generate(request):
+                yield event
+                try:
+                    if event.get("event") == "progress":
+                        progress = PipelineProgress.model_validate(
+                            json.loads(event["data"])
+                        )
+                        await repo.save_step(run_id, progress)
+                    elif event.get("event") == "result":
+                        result_data = json.loads(event["data"])
+                        conti_result = ContiResult.model_validate(result_data)
+                        await repo.save_result(run_id, conti_result)
+                        result_saved = True
+                except Exception as exc:
+                    logger.warning("DB save failed for run %s: %s", run_id, exc)
+        finally:
+            if not result_saved:
+                try:
+                    await repo.mark_failed(run_id, "Pipeline did not produce a result")
+                except Exception:
+                    pass

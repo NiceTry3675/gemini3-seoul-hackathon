@@ -53,3 +53,32 @@ class GenerateMediaRequest(BaseModel):
 
 class GenerateMediaResponse(BaseModel):
     cuts: list[GeneratedCut]
+
+
+class RunSummary(BaseModel):
+    id: str
+    manuscript_preview: str
+    genre: str
+    tone: str
+    output_mode: OutputMode = "image"
+    status: str
+    cut_count: int
+    started_at: str
+    finished_at: str | None = None
+
+
+class RunDetail(BaseModel):
+    id: str
+    manuscript: str
+    genre: str
+    tone: str
+    output_language: str
+    output_mode: OutputMode = "image"
+    status: str
+    characters: CharacterSheet | None = None
+    cuts: list[GeneratedCut] = Field(default_factory=list)
+    validation_report: ValidationReport | None = None
+    steps: list[PipelineProgress] = Field(default_factory=list)
+    error_detail: str | None = None
+    started_at: str
+    finished_at: str | None = None

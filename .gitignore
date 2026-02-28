@@ -229,3 +229,7 @@ sketch
 # Auto Claude data directory
 .auto-claude/
 .omc/
+
+# SQLite pipeline storage
+storage/
+*.db

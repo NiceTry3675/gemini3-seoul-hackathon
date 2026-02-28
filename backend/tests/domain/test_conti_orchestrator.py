@@ -1,4 +1,5 @@
 """Tests for ContiOrchestratorService and its router."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.conti.schemas import ContiRequest, ContiResult, GeneratedCut, PipelineProgress
+from app.domain.conti.schemas import (
+    ContiRequest,
+    ContiResult,
+    GeneratedCut,
+    PipelineProgress,
+)
 from app.domain.conti.service import ContiOrchestratorService
 from app.exceptions import GeminiAPIError, QuotaExceededError
 
@@ -16,11 +22,14 @@ from app.exceptions import GeminiAPIError, QuotaExceededError
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_service(mock_client) -> ContiOrchestratorService:
     return ContiOrchestratorService(mock_client)
 
 
-def _make_conti_request(manuscript: str = "Two strangers meet on a rainy night.") -> ContiRequest:
+def _make_conti_request(
+    manuscript: str = "Two strangers meet on a rainy night.",
+) -> ContiRequest:
     return ContiRequest(
         manuscript=manuscript,
         genre="romance",
@@ -52,6 +61,7 @@ def _parse_data(event: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Fixtures for patching sub-services
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_scene_parser():
@@ -104,10 +114,14 @@ def patched_services(
     mock_cut_planner.plan.return_value = sample_cut_plan
 
     from app.domain.validator.schemas import ValidationReport
-    valid_report = ValidationReport(is_valid=True, issues=[], summary="Validation passed: 0 error(s), 0 warning(s).")
+
+    valid_report = ValidationReport(
+        is_valid=True, issues=[], summary="Validation passed: 0 error(s), 0 warning(s)."
+    )
     mock_validator.validate.return_value = valid_report
 
     from app.domain.image_generation.schemas import ImageGenerationResponse
+
     img_resp = ImageGenerationResponse(image_base64="base64data", mime_type="image/png")
     mock_image_gen.generate.return_value = img_resp
 
@@ -123,6 +137,7 @@ def patched_services(
 # ---------------------------------------------------------------------------
 # Service: generate — happy path (full pipeline)
 # ---------------------------------------------------------------------------
+
 
 class TestContiOrchestratorHappyPath:
     @pytest.mark.asyncio
@@ -153,7 +168,7 @@ class TestContiOrchestratorHappyPath:
         result_data = _parse_data(_result_events(events)[0])
         assert "characters" in result_data
         assert "cuts" in result_data
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
 
     @pytest.mark.asyncio
     async def test_result_event_contains_validation_report(
@@ -197,12 +212,15 @@ class TestContiOrchestratorHappyPath:
 # Service: generate — early pipeline failures
 # ---------------------------------------------------------------------------
 
+
 class TestContiOrchestratorEarlyFailures:
     @pytest.mark.asyncio
     async def test_step1_failure_stops_pipeline_and_yields_failed_event(
         self, mock_genai_client, patched_services
     ):
-        patched_services["scene_parser"].parse.side_effect = GeminiAPIError("scene parse failed")
+        patched_services["scene_parser"].parse.side_effect = GeminiAPIError(
+            "scene parse failed"
+        )
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
 
@@ -227,7 +245,9 @@ class TestContiOrchestratorEarlyFailures:
     async def test_step2_failure_stops_pipeline_and_yields_failed_event(
         self, mock_genai_client, patched_services
     ):
-        patched_services["char_gen"].generate.side_effect = GeminiAPIError("char gen failed")
+        patched_services["char_gen"].generate.side_effect = GeminiAPIError(
+            "char gen failed"
+        )
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
 
@@ -240,7 +260,9 @@ class TestContiOrchestratorEarlyFailures:
     async def test_step3_failure_stops_pipeline_and_yields_failed_event(
         self, mock_genai_client, patched_services
     ):
-        patched_services["cut_planner"].plan.side_effect = GeminiAPIError("cut plan failed")
+        patched_services["cut_planner"].plan.side_effect = GeminiAPIError(
+            "cut plan failed"
+        )
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
 
@@ -253,12 +275,16 @@ class TestContiOrchestratorEarlyFailures:
     async def test_failed_event_contains_error_detail(
         self, mock_genai_client, patched_services
     ):
-        patched_services["scene_parser"].parse.side_effect = GeminiAPIError("detailed error message")
+        patched_services["scene_parser"].parse.side_effect = GeminiAPIError(
+            "detailed error message"
+        )
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
 
         progress = _progress_events(events)
-        failed = [_parse_data(e) for e in progress if _parse_data(e)["status"] == "failed"]
+        failed = [
+            _parse_data(e) for e in progress if _parse_data(e)["status"] == "failed"
+        ]
         assert failed[0]["detail"] is not None
 
 
@@ -266,15 +292,19 @@ class TestContiOrchestratorEarlyFailures:
 # Service: generate — step 4 validation retry logic
 # ---------------------------------------------------------------------------
 
+
 class TestContiOrchestratorValidationRetry:
     @pytest.mark.asyncio
     async def test_validation_fails_retry_succeeds_pipeline_continues(
         self, mock_genai_client, patched_services, sample_cut_plan
     ):
         from app.domain.validator.schemas import ValidationReport, ValidationIssue
+
         invalid_report = ValidationReport(
             is_valid=False,
-            issues=[ValidationIssue(issue_type="test", description="bad", severity="error")],
+            issues=[
+                ValidationIssue(issue_type="test", description="bad", severity="error")
+            ],
             summary="Validation failed: 1 error(s), 0 warning(s).",
         )
         valid_report = ValidationReport(
@@ -282,7 +312,10 @@ class TestContiOrchestratorValidationRetry:
             issues=[],
             summary="Validation passed: 0 error(s), 0 warning(s).",
         )
-        patched_services["validator"].validate.side_effect = [invalid_report, valid_report]
+        patched_services["validator"].validate.side_effect = [
+            invalid_report,
+            valid_report,
+        ]
         patched_services["cut_planner"].plan.return_value = sample_cut_plan
 
         service = _make_service(mock_genai_client)
@@ -298,12 +331,18 @@ class TestContiOrchestratorValidationRetry:
         self, mock_genai_client, patched_services, sample_cut_plan
     ):
         from app.domain.validator.schemas import ValidationReport, ValidationIssue
+
         invalid_report = ValidationReport(
             is_valid=False,
-            issues=[ValidationIssue(issue_type="test", description="bad", severity="error")],
+            issues=[
+                ValidationIssue(issue_type="test", description="bad", severity="error")
+            ],
             summary="Validation failed: 1 error(s), 0 warning(s).",
         )
-        patched_services["validator"].validate.side_effect = [invalid_report, invalid_report]
+        patched_services["validator"].validate.side_effect = [
+            invalid_report,
+            invalid_report,
+        ]
         patched_services["cut_planner"].plan.return_value = sample_cut_plan
 
         service = _make_service(mock_genai_client)
@@ -324,9 +363,12 @@ class TestContiOrchestratorValidationRetry:
         self, mock_genai_client, patched_services, sample_cut_plan
     ):
         from app.domain.validator.schemas import ValidationReport, ValidationIssue
+
         invalid_report = ValidationReport(
             is_valid=False,
-            issues=[ValidationIssue(issue_type="test", description="bad", severity="error")],
+            issues=[
+                ValidationIssue(issue_type="test", description="bad", severity="error")
+            ],
             summary="Validation failed: 1 error(s), 0 warning(s).",
         )
         # First validate returns invalid; then cut_planner.plan raises on retry
@@ -353,7 +395,9 @@ class TestContiOrchestratorValidationRetry:
     async def test_validation_exception_proceeds_without_validation(
         self, mock_genai_client, patched_services
     ):
-        patched_services["validator"].validate.side_effect = Exception("validation crashed")
+        patched_services["validator"].validate.side_effect = Exception(
+            "validation crashed"
+        )
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
 
@@ -374,22 +418,25 @@ class TestContiOrchestratorValidationRetry:
 # Service: generate — step 5 image generation
 # ---------------------------------------------------------------------------
 
+
 class TestContiOrchestratorImageGeneration:
     @pytest.mark.asyncio
-    async def test_all_images_succeed_result_has_12_cuts(
+    async def test_all_images_succeed_result_has_9_cuts(
         self, mock_genai_client, patched_services
     ):
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
 
     @pytest.mark.asyncio
     async def test_image_failure_results_in_empty_image_base64(
         self, mock_genai_client, patched_services
     ):
         """When all image gen attempts fail, cut has empty image_base64."""
-        patched_services["image_gen"].generate.side_effect = Exception("image generation failed")
+        patched_services["image_gen"].generate.side_effect = Exception(
+            "image generation failed"
+        )
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
@@ -404,7 +451,10 @@ class TestContiOrchestratorImageGeneration:
         """Cuts whose image_prompt contains 'cut 1' succeed; all others always fail.
         This is deterministic regardless of concurrency ordering."""
         from app.domain.image_generation.schemas import ImageGenerationResponse
-        good_resp = ImageGenerationResponse(image_base64="gooddata", mime_type="image/png")
+
+        good_resp = ImageGenerationResponse(
+            image_base64="gooddata", mime_type="image/png"
+        )
 
         def side_effect(req):
             # Only the first cut's prompt ends in "cut 1" — succeed for it, fail for rest
@@ -416,7 +466,7 @@ class TestContiOrchestratorImageGeneration:
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
         successful = [c for c in result_data["cuts"] if c["image_base64"] != ""]
         failed = [c for c in result_data["cuts"] if c["image_base64"] == ""]
         assert len(successful) >= 1
@@ -428,14 +478,17 @@ class TestContiOrchestratorImageGeneration:
     ):
         """Image gen fails twice, succeeds on third attempt — result has valid image."""
         from app.domain.image_generation.schemas import ImageGenerationResponse
-        good_resp = ImageGenerationResponse(image_base64="retried_data", mime_type="image/png")
+
+        good_resp = ImageGenerationResponse(
+            image_base64="retried_data", mime_type="image/png"
+        )
 
         call_count = [0]
 
         def side_effect(req):
             call_count[0] += 1
             # First two calls per cut fail, third succeeds
-            # Since there are 12 cuts, track total calls
+            # Since there are 9 cuts, track total calls
             if call_count[0] % 3 != 0:
                 raise Exception("temporary failure")
             return good_resp
@@ -445,21 +498,21 @@ class TestContiOrchestratorImageGeneration:
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
         # At least some cuts should have succeeded via retry
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
 
     @pytest.mark.asyncio
     async def test_images_generated_in_batches_of_3(
         self, mock_genai_client, patched_services
     ):
-        """12 cuts should produce 4 batches of 3; verify step 5 emits batch progress events."""
+        """9 cuts should produce 3 batches of 3; verify step 5 emits batch progress events."""
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         progress = _progress_events(events)
         step5_events = [_parse_data(e) for e in progress if _parse_data(e)["step"] == 5]
-        # Should have: 1 "running" start + 4 batch progress "running" + 1 "completed"
+        # Should have: 1 "running" start + 3 batch progress "running" + 1 "completed"
         running_events = [e for e in step5_events if e["status"] == "running"]
-        # At least the initial + 4 batch updates
-        assert len(running_events) >= 4
+        # At least the initial + 3 batch updates
+        assert len(running_events) >= 3
 
     @pytest.mark.asyncio
     async def test_result_cut_contains_correct_fields(
@@ -480,6 +533,7 @@ class TestContiOrchestratorImageGeneration:
 # ---------------------------------------------------------------------------
 # Service: generate — SSE event format
 # ---------------------------------------------------------------------------
+
 
 class TestContiOrchestratorSSEFormat:
     @pytest.mark.asyncio
@@ -520,6 +574,7 @@ class TestContiOrchestratorSSEFormat:
 # Service: generate — short manuscript
 # ---------------------------------------------------------------------------
 
+
 class TestContiOrchestratorShortManuscript:
     @pytest.mark.asyncio
     async def test_single_sentence_manuscript_completes_pipeline(
@@ -535,6 +590,7 @@ class TestContiOrchestratorShortManuscript:
 # Router: POST /api/pipeline/generate
 # ---------------------------------------------------------------------------
 
+
 class TestContiGenerateRouter:
     def _valid_payload(self):
         return {
@@ -545,8 +601,12 @@ class TestContiGenerateRouter:
         }
 
     def test_generate_returns_200(
-        self, test_client, mock_genai_client,
-        sample_scene_breakdown, sample_character_sheet, sample_cut_plan
+        self,
+        test_client,
+        mock_genai_client,
+        sample_scene_breakdown,
+        sample_character_sheet,
+        sample_cut_plan,
     ):
         from app.domain.validator.schemas import ValidationReport
         from app.domain.image_generation.schemas import ImageGenerationResponse
@@ -570,7 +630,9 @@ class TestContiGenerateRouter:
                 image_base64="data", mime_type="image/png"
             )
 
-            response = test_client.post("/api/pipeline/generate", json=self._valid_payload())
+            response = test_client.post(
+                "/api/pipeline/generate", json=self._valid_payload()
+            )
             assert response.status_code == 200
 
     def test_generate_returns_422_on_missing_manuscript(self, test_client):

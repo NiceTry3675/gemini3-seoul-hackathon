@@ -5,6 +5,7 @@ app/config.py instantiates Settings() at module level.  We patch the
 environment variable here using pytest's autouse session fixture so it
 is visible to every test file regardless of import order.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ from fastapi.testclient import TestClient
 # Ensure GOOGLE_API_KEY is present before any app import resolves Settings()
 # ---------------------------------------------------------------------------
 
+
 def pytest_configure(config):
     """Called very early by pytest, before any collection or import."""
     os.environ.setdefault("GOOGLE_API_KEY", "test-key")
@@ -27,6 +29,7 @@ def pytest_configure(config):
 # ---------------------------------------------------------------------------
 # Mock genai.Client fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_genai_client():
@@ -49,26 +52,52 @@ def mock_genai_client():
 # TestClient fixture that overrides the genai client dependency
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def test_client(mock_genai_client):
-    """FastAPI TestClient with get_genai_client dependency overridden."""
+    """FastAPI TestClient with get_genai_client and get_db dependencies overridden."""
+    import aiosqlite
     from app.main import app
     from app.shared.client import get_genai_client
+    from app.shared.database import get_db, _SCHEMA_SQL
+
+    # In-memory SQLite for tests
+    _test_db_conn = None
+
+    async def _init_test_db():
+        nonlocal _test_db_conn
+        _test_db_conn = await aiosqlite.connect(":memory:")
+        _test_db_conn.row_factory = aiosqlite.Row
+        await _test_db_conn.execute("PRAGMA foreign_keys = ON")
+        await _test_db_conn.executescript(_SCHEMA_SQL)
+        await _test_db_conn.commit()
+
+    async def _override_get_db():
+        yield _test_db_conn
+
+    import asyncio
+
+    asyncio.get_event_loop().run_until_complete(_init_test_db())
 
     app.dependency_overrides[get_genai_client] = lambda: mock_genai_client
+    app.dependency_overrides[get_db] = _override_get_db
     client = TestClient(app, raise_server_exceptions=False)
     yield client
     app.dependency_overrides.clear()
+    if _test_db_conn:
+        asyncio.get_event_loop().run_until_complete(_test_db_conn.close())
 
 
 # ---------------------------------------------------------------------------
 # Shared domain fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_novel_input():
     """A minimal valid NovelInput."""
     from app.domain.scene_parser.schemas import NovelInput
+
     return NovelInput(
         manuscript="Two strangers meet on a rainy night and fall in love.",
         genre="romance",
@@ -81,6 +110,7 @@ def sample_novel_input():
 def sample_scene_breakdown():
     """A valid SceneBreakdown with 2 scenes."""
     from app.domain.scene_parser.schemas import Scene, SceneBreakdown
+
     return SceneBreakdown(
         scenes=[
             Scene(
@@ -107,6 +137,7 @@ def sample_scene_breakdown():
 def sample_character_sheet():
     """A valid CharacterSheet with 2 characters."""
     from app.domain.character_gen.schemas import Character, CharacterSheet
+
     return CharacterSheet(
         characters=[
             Character(
@@ -129,12 +160,13 @@ def sample_character_sheet():
 
 @pytest.fixture
 def sample_cut_plan():
-    """A valid CutPlan with exactly 12 cuts."""
+    """A valid CutPlan with exactly 9 cuts."""
     from app.domain.cut_planner.schemas import Cut, CutPlan
+
     cuts = [
         Cut(
             cut_number=i,
-            scene_ref=1 if i <= 6 else 2,
+            scene_ref=1 if i <= 5 else 2,
             description=f"Cut {i} description",
             dialogue=[f"Dialogue for cut {i}"],
             narration=f"Narration for cut {i}",
@@ -142,7 +174,7 @@ def sample_cut_plan():
             emotion="neutral",
             image_prompt=f"image prompt for cut {i}",
         )
-        for i in range(1, 13)
+        for i in range(1, 10)
     ]
     return CutPlan(cuts=cuts)
 
@@ -150,6 +182,7 @@ def sample_cut_plan():
 # ---------------------------------------------------------------------------
 # Helper to create a structured mock response
 # ---------------------------------------------------------------------------
+
 
 def mock_structured_response(text: str) -> MagicMock:
     """Create a MagicMock response with the given JSON text."""

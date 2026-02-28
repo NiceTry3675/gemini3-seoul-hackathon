@@ -1,8 +1,11 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.exceptions import DomainException
+from app.shared.database import init_db
 from app.routers.health import router as health_router
 from app.domain.text_generation.router import router as text_router
 from app.domain.image_generation.router import router as image_router
@@ -13,9 +16,17 @@ from app.domain.validator.router import router as validator_router
 from app.domain.conti.router import router as conti_router
 from app.domain.video_generation.router import router as video_router
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
 app = FastAPI(
     title="Gemini API Wrapper",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS
@@ -29,7 +40,9 @@ app.add_middleware(
 
 
 @app.exception_handler(DomainException)
-async def domain_exception_handler(request: Request, exc: DomainException) -> JSONResponse:
+async def domain_exception_handler(
+    request: Request, exc: DomainException
+) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.detail},

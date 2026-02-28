@@ -33,3 +33,30 @@ class PipelineProgress(BaseModel):
     step_name: str
     status: str = Field(..., pattern="^(running|completed|failed)$")
     detail: str | None = None
+
+
+class RunSummary(BaseModel):
+    id: str
+    manuscript_preview: str
+    genre: str
+    tone: str
+    status: str
+    cut_count: int
+    started_at: str
+    finished_at: str | None = None
+
+
+class RunDetail(BaseModel):
+    id: str
+    manuscript: str
+    genre: str
+    tone: str
+    output_language: str
+    status: str
+    characters: CharacterSheet | None = None
+    cuts: list[GeneratedCut] = Field(default_factory=list)
+    validation_report: ValidationReport | None = None
+    steps: list[PipelineProgress] = Field(default_factory=list)
+    error_detail: str | None = None
+    started_at: str
+    finished_at: str | None = None

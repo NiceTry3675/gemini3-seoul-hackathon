@@ -4,10 +4,7 @@ from fastapi import APIRouter, Depends
 from google import genai
 
 from app.shared.client import get_genai_client
-from app.domain.video_generation.schemas import (
-    VideoGenerationRequest,
-    VideoGenerationResponse,
-)
+from app.domain.video_generation.schemas import VideoGenerationRequest, VideoGenerationResponse
 from app.domain.video_generation.service import GeminiVideoService
 
 router = APIRouter(prefix="/api/video", tags=["video-generation"])

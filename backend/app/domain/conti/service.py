@@ -45,11 +45,17 @@ class ContiOrchestratorService:
     def _sse_event(self, event: str, data: dict) -> dict:
         return {"event": event, "data": json.dumps(data, ensure_ascii=False)}
 
-    def _progress_event(self, step: int, step_name: str, status: str, detail: str | None = None) -> dict:
-        progress = PipelineProgress(step=step, step_name=step_name, status=status, detail=detail)
+    def _progress_event(
+        self, step: int, step_name: str, status: str, detail: str | None = None
+    ) -> dict:
+        progress = PipelineProgress(
+            step=step, step_name=step_name, status=status, detail=detail
+        )
         return self._sse_event("progress", progress.model_dump())
 
-    async def _generate_image_with_retry(self, cut_prompt: str, cut_number: int) -> tuple[str, str]:
+    async def _generate_image_with_retry(
+        self, cut_prompt: str, cut_number: int
+    ) -> tuple[str, str]:
         """Returns (image_base64, mime_type). Returns ("", "image/png") on total failure."""
         for attempt in range(1, _IMAGE_MAX_RETRIES + 1):
             try:
@@ -59,7 +65,10 @@ class ContiOrchestratorService:
             except Exception as exc:
                 logger.warning(
                     "Image gen attempt %d/%d failed for cut %d: %s",
-                    attempt, _IMAGE_MAX_RETRIES, cut_number, exc,
+                    attempt,
+                    _IMAGE_MAX_RETRIES,
+                    cut_number,
+                    exc,
                 )
                 if attempt < _IMAGE_MAX_RETRIES:
                     await asyncio.sleep(1.0)
@@ -76,22 +85,36 @@ class ContiOrchestratorService:
         # Step 1: Scene parsing
         yield self._progress_event(1, "scene_parse", "running")
         try:
-            scene_breakdown = await asyncio.to_thread(self._scene_parser.parse, novel_input)
+            scene_breakdown = await asyncio.to_thread(
+                self._scene_parser.parse, novel_input
+            )
         except Exception as exc:
             yield self._progress_event(1, "scene_parse", "failed", str(exc))
             return
-        yield self._progress_event(1, "scene_parse", "completed", f"{len(scene_breakdown.scenes)} scenes parsed")
+        yield self._progress_event(
+            1,
+            "scene_parse",
+            "completed",
+            f"{len(scene_breakdown.scenes)} scenes parsed",
+        )
 
         # Step 2: Character generation
         yield self._progress_event(2, "character_gen", "running")
         try:
-            char_req = CharacterGenRequest(novel_input=novel_input, scene_breakdown=scene_breakdown)
+            char_req = CharacterGenRequest(
+                novel_input=novel_input, scene_breakdown=scene_breakdown
+            )
             char_resp = await asyncio.to_thread(self._char_gen.generate, char_req)
             character_sheet = char_resp.character_sheet
         except Exception as exc:
             yield self._progress_event(2, "character_gen", "failed", str(exc))
             return
-        yield self._progress_event(2, "character_gen", "completed", f"{len(character_sheet.characters)} characters generated")
+        yield self._progress_event(
+            2,
+            "character_gen",
+            "completed",
+            f"{len(character_sheet.characters)} characters generated",
+        )
 
         # Step 3: Cut planning
         yield self._progress_event(3, "cut_plan", "running")
@@ -105,45 +128,82 @@ class ContiOrchestratorService:
         except Exception as exc:
             yield self._progress_event(3, "cut_plan", "failed", str(exc))
             return
-        yield self._progress_event(3, "cut_plan", "completed", f"{len(cut_plan.cuts)} cuts planned")
+        yield self._progress_event(
+            3, "cut_plan", "completed", f"{len(cut_plan.cuts)} cuts planned"
+        )
 
         # Step 4: Validation (with one retry of cut_plan if invalid)
         yield self._progress_event(4, "validate", "running")
         validation_report: ValidationReport | None = None
         try:
-            val_req = ValidationRequest(cut_plan=cut_plan, character_sheet=character_sheet)
-            validation_report = await asyncio.to_thread(self._validator.validate, val_req)
+            val_req = ValidationRequest(
+                cut_plan=cut_plan, character_sheet=character_sheet
+            )
+            validation_report = await asyncio.to_thread(
+                self._validator.validate, val_req
+            )
 
             if not validation_report.is_valid:
                 # Retry cut_plan once
-                logger.info("Validation failed, retrying cut plan. Issues: %s", validation_report.summary)
+                logger.info(
+                    "Validation failed, retrying cut plan. Issues: %s",
+                    validation_report.summary,
+                )
                 try:
                     cut_plan = await asyncio.to_thread(self._cut_planner.plan, cut_req)
-                    val_req2 = ValidationRequest(cut_plan=cut_plan, character_sheet=character_sheet)
-                    validation_report = await asyncio.to_thread(self._validator.validate, val_req2)
+                    val_req2 = ValidationRequest(
+                        cut_plan=cut_plan, character_sheet=character_sheet
+                    )
+                    validation_report = await asyncio.to_thread(
+                        self._validator.validate, val_req2
+                    )
                     if not validation_report.is_valid:
-                        logger.warning("Validation still failed after retry; proceeding with warning.")
-                        yield self._progress_event(4, "validate", "completed", "validation warnings: " + validation_report.summary)
+                        logger.warning(
+                            "Validation still failed after retry; proceeding with warning."
+                        )
+                        yield self._progress_event(
+                            4,
+                            "validate",
+                            "completed",
+                            "validation warnings: " + validation_report.summary,
+                        )
                     else:
-                        yield self._progress_event(4, "validate", "completed", "validated after retry")
+                        yield self._progress_event(
+                            4, "validate", "completed", "validated after retry"
+                        )
                 except Exception as retry_exc:
-                    logger.warning("Cut plan retry failed: %s; proceeding anyway.", retry_exc)
-                    yield self._progress_event(4, "validate", "completed", "retry failed; proceeding with original plan")
+                    logger.warning(
+                        "Cut plan retry failed: %s; proceeding anyway.", retry_exc
+                    )
+                    yield self._progress_event(
+                        4,
+                        "validate",
+                        "completed",
+                        "retry failed; proceeding with original plan",
+                    )
             else:
-                yield self._progress_event(4, "validate", "completed", validation_report.summary)
+                yield self._progress_event(
+                    4, "validate", "completed", validation_report.summary
+                )
         except (QuotaExceededError, SafetyBlockError):
             raise
         except Exception as exc:
-            logger.warning("Validation step failed: %s; proceeding without validation.", exc)
-            yield self._progress_event(4, "validate", "completed", "validation skipped due to error")
+            logger.warning(
+                "Validation step failed: %s; proceeding without validation.", exc
+            )
+            yield self._progress_event(
+                4, "validate", "completed", "validation skipped due to error"
+            )
 
         # Step 5: Image generation in batches
-        yield self._progress_event(5, "image_gen", "running", f"generating {len(cut_plan.cuts)} images")
+        yield self._progress_event(
+            5, "image_gen", "running", f"generating {len(cut_plan.cuts)} images"
+        )
         generated_cuts: list[GeneratedCut] = []
         cuts = cut_plan.cuts
 
         for batch_start in range(0, len(cuts), _BATCH_SIZE):
-            batch = cuts[batch_start: batch_start + _BATCH_SIZE]
+            batch = cuts[batch_start : batch_start + _BATCH_SIZE]
             tasks = [
                 self._generate_image_with_retry(cut.image_prompt, cut.cut_number)
                 for cut in batch
@@ -151,25 +211,31 @@ class ContiOrchestratorService:
             results = await asyncio.gather(*tasks)
 
             for cut, (image_base64, mime_type) in zip(batch, results):
-                generated_cuts.append(GeneratedCut(
-                    cut_number=cut.cut_number,
-                    image_base64=image_base64,
-                    mime_type=mime_type,
-                    dialogue=cut.dialogue,
-                    narration=cut.narration,
-                    description=cut.description,
-                ))
+                generated_cuts.append(
+                    GeneratedCut(
+                        cut_number=cut.cut_number,
+                        image_base64=image_base64,
+                        mime_type=mime_type,
+                        dialogue=cut.dialogue,
+                        narration=cut.narration,
+                        description=cut.description,
+                    )
+                )
 
             batch_end = min(batch_start + _BATCH_SIZE, len(cuts))
             yield self._progress_event(
-                5, "image_gen", "running",
+                5,
+                "image_gen",
+                "running",
                 f"generated {batch_end}/{len(cuts)} images",
             )
 
             if batch_end < len(cuts):
                 await asyncio.sleep(_BATCH_DELAY)
 
-        yield self._progress_event(5, "image_gen", "completed", f"{len(generated_cuts)} images generated")
+        yield self._progress_event(
+            5, "image_gen", "completed", f"{len(generated_cuts)} images generated"
+        )
 
         # Final result
         result = ContiResult(
@@ -178,3 +244,38 @@ class ContiOrchestratorService:
             validation_report=validation_report,
         )
         yield self._sse_event("result", result.model_dump())
+
+    async def generate_and_persist(
+        self, request: ContiRequest, run_id: str, repo: "PipelineRepository"
+    ) -> AsyncGenerator[dict, None]:
+        from app.domain.conti.repository import (
+            PipelineRepository as _Repo,
+        )  # noqa: F811
+
+        result_saved = False
+        try:
+            async for event in self.generate(request):
+                yield event
+                try:
+                    if event.get("event") == "progress":
+                        progress = PipelineProgress.model_validate(
+                            json.loads(event["data"])
+                        )
+                        await repo.save_step(run_id, progress)
+                    elif event.get("event") == "result":
+                        result_data = json.loads(event["data"])
+                        conti_result = ContiResult.model_validate(result_data)
+                        await repo.save_result(run_id, conti_result)
+                        result_saved = True
+                except Exception as exc:
+                    logger.warning("DB save failed for run %s: %s", run_id, exc)
+                    yield self._sse_event("db_warning", {"message": str(exc)})
+        except Exception as exc:
+            logger.error("Pipeline generator raised for run %s: %s", run_id, exc)
+            yield self._sse_event("db_warning", {"message": f"Pipeline error: {exc}"})
+        finally:
+            if not result_saved:
+                try:
+                    await repo.mark_failed(run_id, "Pipeline did not produce a result")
+                except Exception:
+                    pass

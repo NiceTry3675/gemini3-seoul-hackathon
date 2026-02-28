@@ -228,3 +228,4 @@ sketch
 
 # Auto Claude data directory
 .auto-claude/
+.omc/

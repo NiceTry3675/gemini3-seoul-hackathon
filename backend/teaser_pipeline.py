@@ -17,21 +17,38 @@ from google.genai import types
 from PIL import Image
 from pydantic import ValidationError
 
-from .teaser_models import (
-    PromptPreviewCut,
-    PromptPreviewResult,
-    TeaserCut,
-    TeaserPlan,
-    TeaserRequest,
-    TeaserResult,
-)
-from .teaser_prompts import (
-    build_anchor_image_prompt,
-    build_panel_image_prompt,
-    build_storyboard_user_prompt,
-    get_storyboard_retry_suffix,
-    get_storyboard_system_prompt,
-)
+if __package__:
+    from .teaser_models import (
+        PromptPreviewCut,
+        PromptPreviewResult,
+        TeaserCut,
+        TeaserPlan,
+        TeaserRequest,
+        TeaserResult,
+    )
+    from .teaser_prompts import (
+        build_anchor_image_prompt,
+        build_panel_image_prompt,
+        build_storyboard_user_prompt,
+        get_storyboard_retry_suffix,
+        get_storyboard_system_prompt,
+    )
+else:
+    from teaser_models import (
+        PromptPreviewCut,
+        PromptPreviewResult,
+        TeaserCut,
+        TeaserPlan,
+        TeaserRequest,
+        TeaserResult,
+    )
+    from teaser_prompts import (
+        build_anchor_image_prompt,
+        build_panel_image_prompt,
+        build_storyboard_user_prompt,
+        get_storyboard_retry_suffix,
+        get_storyboard_system_prompt,
+    )
 
 
 def _ensure_api_key() -> None:
@@ -51,6 +68,10 @@ def make_client() -> genai.Client:
 def _is_transient_network_error(exc: Exception) -> bool:
     text = f"{type(exc).__name__}: {exc}".lower()
     hints = (
+        "503",
+        "unavailable",
+        "high demand",
+        "service unavailable",
         "handshake operation timed out",
         "timed out",
         "ssl",

@@ -9,6 +9,7 @@ from google.genai import types
 from app.config import settings
 from app.exceptions import GeminiAPIError, QuotaExceededError, SafetyBlockError
 from app.prompt_manager import get_prompt_manager
+from app.shared.genai_parsing import extract_structured_data
 from app.domain.scene_parser.schemas import NovelInput, SceneBreakdown
 
 
@@ -51,19 +52,12 @@ class SceneParserService:
                 config=config,
             )
 
-            text = response.text or "{}"
-            text = text.strip()
-            if text.startswith("```json"):
-                text = text.removeprefix("```json").removesuffix("```").strip()
-            elif text.startswith("```"):
-                text = text.removeprefix("```").removesuffix("```").strip()
-
-            data = json.loads(text)
+            data = extract_structured_data(response)
             return SceneBreakdown.model_validate(data)
 
         except (QuotaExceededError, SafetyBlockError):
             raise
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             raise GeminiAPIError(f"Failed to parse structured response: {exc}") from exc
         except Exception as exc:
             self._handle_error(exc)

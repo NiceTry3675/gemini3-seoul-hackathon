@@ -8,7 +8,6 @@ import VideoExportScreen from './components/screens/VideoExportScreen';
 import {
   fetchPipelinePreview,
   generateMediaFromPreview,
-  generateFrameOptions,
   generateReferenceImages,
   mapVisualStyleToPipelineTemplate,
 } from './services/workflowService';
@@ -40,6 +39,7 @@ function normalizeError(error: unknown): string {
 export default function App() {
   const [state, dispatch] = useReducer(workflowReducer, undefined, createInitialWorkflowState);
   const [previewData, setPreviewData] = useState<PipelinePreviewModel | null>(null);
+  const [editableCutPrompts, setEditableCutPrompts] = useState<Record<number, string>>({});
   const [metaPreviewLoading, setMetaPreviewLoading] = useState(false);
   const [metaPreviewError, setMetaPreviewError] = useState<string | null>(null);
   const [referenceLoading, setReferenceLoading] = useState(false);
@@ -154,6 +154,18 @@ export default function App() {
   }, [state.step, previewData, referenceImages, referenceError]);
 
   useEffect(() => {
+    if (!previewData) {
+      setEditableCutPrompts({});
+      return;
+    }
+    const next: Record<number, string> = {};
+    for (const cut of previewData.cut_plan.cuts) {
+      next[cut.cut_number] = cut.image_prompt;
+    }
+    setEditableCutPrompts(next);
+  }, [previewData]);
+
+  useEffect(() => {
     if (state.step !== 'processing_state' || !state.processing.running || !state.selectedStyle) {
       return undefined;
     }
@@ -191,19 +203,27 @@ export default function App() {
       payload: { step: 5, step_name: 'media_gen', status: 'running', detail: 'Generating images with selected references' },
     });
 
-    const mergedReferences: Record<string, string> = {};
-    for (const [style, data] of Object.entries(referenceImages)) {
-      if (data) {
-        mergedReferences[style] = data.imageBase64;
+    const primaryCharacterName = previewData.characters.characters[0]?.name || 'main_character';
+    const mergedReferences: Record<string, string> = {
+      anchor: selectedReference.imageBase64,
+      selected_reference: selectedReference.imageBase64,
+      [primaryCharacterName]: selectedReference.imageBase64,
+    };
+
+    const promptOverrides: Record<number, string> = {};
+    for (const cut of previewData.cut_plan.cuts) {
+      const edited = editableCutPrompts[cut.cut_number];
+      if (typeof edited === 'string' && edited.trim().length > 0 && edited.trim() !== cut.image_prompt) {
+        promptOverrides[cut.cut_number] = edited.trim();
       }
     }
-    mergedReferences.anchor = selectedReference.imageBase64;
-    mergedReferences.selected_reference = selectedReference.imageBase64;
 
     void generateMediaFromPreview(
+      state.storyInput.text,
       previewData,
       mapVisualStyleToPipelineTemplate(state.selectedStyle),
       mergedReferences,
+      promptOverrides,
       abortController.signal,
     )
       .then((result) => {
@@ -223,7 +243,15 @@ export default function App() {
     return () => {
       abortController.abort();
     };
-  }, [state.step, state.processing.running, state.selectedStyle, state.storyInput.text, previewData, referenceImages]);
+  }, [
+    state.step,
+    state.processing.running,
+    state.selectedStyle,
+    state.storyInput.text,
+    previewData,
+    referenceImages,
+    editableCutPrompts,
+  ]);
 
   const step = state.step;
 
@@ -240,15 +268,14 @@ export default function App() {
     dispatch({ type: 'SET_META_DRAFT', payload: '' });
     setMetaPreviewError(null);
     setPreviewData(null);
+    setEditableCutPrompts({});
     setReferenceImages({});
     setReferenceError(null);
     dispatch({ type: 'NEXT' });
   };
 
   const handleStyleSelection = (style: NonNullable<typeof state.selectedStyle>) => {
-    const frameOptions = state.frameSelections.map((frame) =>
-      generateFrameOptions(frame.frameIndex, style),
-    );
+    const frameOptions = state.frameSelections.map(() => []);
     dispatch({
       type: 'APPLY_STYLE',
       payload: {
@@ -299,6 +326,7 @@ export default function App() {
               dispatch({ type: 'SET_META_DRAFT', payload: '' });
               setMetaPreviewError(null);
               setPreviewData(null);
+              setEditableCutPrompts({});
             }}
             onBack={goBack}
             onNext={goNext}
@@ -330,10 +358,30 @@ export default function App() {
       case 'meta_prompt_3':
         return (
           <MetaPrompt3Screen
-            frameSelections={state.frameSelections}
-            onSelectOption={(frameIndex, optionId) =>
-              dispatch({ type: 'SELECT_FRAME_OPTION', payload: { frameIndex, optionId } })
-            }
+            selectedStyle={state.selectedStyle}
+            selectedReferenceImage={state.selectedStyle ? referenceImages[state.selectedStyle] ?? null : null}
+            anchorPrompt={previewData?.anchor_prompt ?? ''}
+            cutPrompts={previewData?.cut_plan.cuts
+              .slice()
+              .sort((a, b) => a.cut_number - b.cut_number)
+              .map((cut) => ({
+                cutNumber: cut.cut_number,
+                prompt: editableCutPrompts[cut.cut_number] ?? cut.image_prompt,
+              })) ?? []}
+            onCutPromptChange={(cutNumber, prompt) => {
+              setEditableCutPrompts((prev) => ({
+                ...prev,
+                [cutNumber]: prompt,
+              }));
+            }}
+            onResetPrompts={() => {
+              if (!previewData) return;
+              const next: Record<number, string> = {};
+              for (const cut of previewData.cut_plan.cuts) {
+                next[cut.cut_number] = cut.image_prompt;
+              }
+              setEditableCutPrompts(next);
+            }}
             onStartOver={() => dispatch({ type: 'RESET' })}
             onGenerateTeaser={startProcessing}
             onBack={goBack}

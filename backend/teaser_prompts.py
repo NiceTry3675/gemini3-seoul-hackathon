@@ -4,7 +4,10 @@ from functools import lru_cache
 from pathlib import Path
 import tomllib
 
-from .teaser_models import Panel, TeaserPlan, TeaserRequest
+if __package__:
+    from .teaser_models import Panel, TeaserPlan, TeaserRequest
+else:
+    from teaser_models import Panel, TeaserPlan, TeaserRequest
 
 _CONFIG_PATH = Path(__file__).with_name("system_instruction.toml")
 

@@ -15,6 +15,7 @@ from app.domain.cut_planner.router import router as cut_planner_router
 from app.domain.validator.router import router as validator_router
 from app.domain.conti.router import router as conti_router
 from app.domain.video_generation.router import router as video_router
+from app.domain.teaser_compat.router import router as teaser_compat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -66,3 +67,4 @@ app.include_router(cut_planner_router)
 app.include_router(validator_router)
 app.include_router(conti_router)
 app.include_router(video_router)
+app.include_router(teaser_compat_router)

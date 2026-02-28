@@ -57,8 +57,25 @@ export interface GeneratedReferenceImage {
   mimeType: string;
 }
 
-interface GenerateMediaResponsePayload {
-  cuts: PipelineResultModel['cuts'];
+interface CompatPromptPreviewResponse {
+  plan: unknown;
+  anchor_prompt: string;
+  cuts: Array<{
+    index: number;
+    prompt: string;
+    reference_inputs: string[];
+  }>;
+  cut_plan: PipelinePreviewModel['cut_plan'];
+  character_sheet: PipelinePreviewModel['characters'];
+}
+
+interface CompatTeaserResponse {
+  plan: unknown;
+  character_anchor_image_base64: string;
+  cuts: Array<{
+    index: number;
+    image_base64: string;
+  }>;
 }
 
 function getApiBaseUrl(): string {
@@ -228,18 +245,18 @@ export async function fetchPipelinePreview(
   const genre = request.genre?.trim() ?? '';
   const tone = request.tone?.trim() ?? '';
 
-  const response = await fetch(`${getApiBaseUrl()}/api/pipeline/preview`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/prompt-preview`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      manuscript: request.manuscript,
+      source_text: request.manuscript,
       ...(genre ? { genre } : {}),
       ...(tone ? { tone } : {}),
       output_language: request.outputLanguage ?? 'ko',
-      output_mode: 'image',
       style_template: request.styleTemplate,
+      max_image_cuts: 9,
     }),
     signal,
   });
@@ -248,26 +265,39 @@ export async function fetchPipelinePreview(
     throw new Error(await parseHttpError(response));
   }
 
-  return (await response.json()) as PipelinePreviewModel;
+  const payload = await response.json() as CompatPromptPreviewResponse;
+  return {
+    cut_plan: payload.cut_plan,
+    characters: payload.character_sheet,
+    anchor_prompt: payload.anchor_prompt,
+    cuts: payload.cuts.map((cut) => ({
+      cut_number: cut.index,
+      styled_prompt: cut.prompt,
+      reference_inputs: cut.reference_inputs,
+    })),
+  };
 }
 
 export async function generateMediaFromPreview(
+  sourceText: string,
   preview: PipelinePreviewModel,
   styleTemplate: PipelineStyleTemplate,
   referenceImages: Record<string, string>,
+  promptOverrides: Record<number, string>,
   signal: AbortSignal,
 ): Promise<PipelineResultModel> {
-  const response = await fetch(`${getApiBaseUrl()}/api/pipeline/step/generate-media`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/teaser`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      cut_plan: preview.cut_plan,
-      character_sheet: preview.characters,
-      output_mode: 'image',
+      source_text: sourceText,
+      output_language: 'ko',
       style_template: styleTemplate,
       reference_images: referenceImages,
+      prompt_overrides: promptOverrides,
+      max_image_cuts: 9,
     }),
     signal,
   });
@@ -276,13 +306,34 @@ export async function generateMediaFromPreview(
     throw new Error(await parseHttpError(response));
   }
 
-  const payload = await response.json() as GenerateMediaResponsePayload;
+  const payload = await response.json() as CompatTeaserResponse;
+  const cutByNumber = new Map(preview.cut_plan.cuts.map((cut) => [cut.cut_number, cut]));
+  const mappedCuts = payload.cuts
+    .sort((a, b) => a.index - b.index)
+    .map((cut) => {
+      const base = cutByNumber.get(cut.index);
+      const override = promptOverrides[cut.index];
+      return {
+        cut_number: cut.index,
+        image_base64: cut.image_base64,
+        mime_type: 'image/png',
+        video_base64: '',
+        video_mime_type: '',
+        dialogue: base?.dialogue ?? [],
+        narration: base?.narration ?? '',
+        description: base?.description ?? (override || ''),
+      };
+    });
+  const nextRefs = { ...referenceImages };
+  if (payload.character_anchor_image_base64) {
+    nextRefs.anchor = payload.character_anchor_image_base64;
+  }
 
   return {
     characters: preview.characters,
-    cuts: payload.cuts,
+    cuts: mappedCuts,
     validation_report: null,
-    reference_images: referenceImages,
+    reference_images: nextRefs,
   };
 }
 

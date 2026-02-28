@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import NoReturn
 
 from google import genai
@@ -9,6 +8,7 @@ from google.genai import types
 from app.config import settings
 from app.exceptions import GeminiAPIError, QuotaExceededError, SafetyBlockError
 from app.prompt_manager import get_prompt_manager
+from app.shared.genai_parsing import extract_structured_data
 from app.domain.validator.schemas import ValidationRequest, ValidationReport, ValidationIssue
 
 
@@ -120,14 +120,7 @@ class ValidatorService:
                 config=config,
             )
 
-            text = response.text or "{}"
-            text = text.strip()
-            if text.startswith("```json"):
-                text = text.removeprefix("```json").removesuffix("```").strip()
-            elif text.startswith("```"):
-                text = text.removeprefix("```").removesuffix("```").strip()
-
-            data = json.loads(text)
+            data = extract_structured_data(response)
             gemini_report = ValidationReport.model_validate(data)
             gemini_issues = gemini_report.issues
 

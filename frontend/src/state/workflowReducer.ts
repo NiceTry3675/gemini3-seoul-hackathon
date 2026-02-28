@@ -52,10 +52,6 @@ function hasStyleSelection(state: AppWorkflowState): boolean {
   return state.selectedStyle !== null;
 }
 
-function hasAllFrameSelections(state: AppWorkflowState): boolean {
-  return state.frameSelections.length > 0 && state.frameSelections.every((frame) => frame.selectedOptionId !== null);
-}
-
 function applyBackStep(current: WorkflowStep): WorkflowStep {
   switch (current) {
     case 'meta_prompt_1':
@@ -225,7 +221,7 @@ export function workflowReducer(
       };
 
     case 'START_PROCESSING':
-      if (!hasAllFrameSelections(state) || state.selectedStyle === null || state.storyInput.text.trim().length === 0) {
+      if (state.selectedStyle === null || state.storyInput.text.trim().length === 0) {
         return state;
       }
       return {

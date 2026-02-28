@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,7 +24,7 @@ def _valid_cut_plan_json() -> str:
     cuts = [
         {
             "cut_number": i,
-            "scene_ref": 1 if i <= 6 else 2,
+            "scene_ref": 1 if i <= 5 else 2,
             "description": f"Description of cut {i}",
             "dialogue": [f"Dialogue {i}"],
             "narration": f"Narration {i}",
@@ -32,9 +32,17 @@ def _valid_cut_plan_json() -> str:
             "emotion": "neutral",
             "image_prompt": f"image prompt for cut {i}",
         }
-        for i in range(1, 13)
+        for i in range(1, 10)
     ]
     return json.dumps({"cuts": cuts})
+
+
+@pytest.fixture(autouse=True)
+def mock_prompt_manager():
+    mock_pm = MagicMock()
+    mock_pm.get_system_instruction.return_value = "You are a cut planner."
+    with patch("app.domain.cut_planner.service.get_prompt_manager", return_value=mock_pm):
+        yield mock_pm
 
 
 # ---------------------------------------------------------------------------
@@ -42,10 +50,10 @@ def _valid_cut_plan_json() -> str:
 # ---------------------------------------------------------------------------
 
 class TestCutPlannerServiceHappyPath:
-    def test_plan_returns_cut_plan(
+    async def test_plan_returns_cut_plan(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_cut_plan_json()
         )
         service = _make_service(mock_genai_client)
@@ -54,13 +62,13 @@ class TestCutPlannerServiceHappyPath:
             scene_breakdown=sample_scene_breakdown,
             character_sheet=sample_character_sheet,
         )
-        result = service.plan(req)
+        result = await service.plan(req)
         assert isinstance(result, CutPlan)
 
-    def test_plan_returns_exactly_12_cuts(
+    async def test_plan_returns_exactly_9_cuts(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_cut_plan_json()
         )
         service = _make_service(mock_genai_client)
@@ -69,13 +77,13 @@ class TestCutPlannerServiceHappyPath:
             scene_breakdown=sample_scene_breakdown,
             character_sheet=sample_character_sheet,
         )
-        result = service.plan(req)
-        assert len(result.cuts) == 12
+        result = await service.plan(req)
+        assert len(result.cuts) == 9
 
-    def test_plan_cut_numbers_are_1_through_12(
+    async def test_plan_cut_numbers_are_1_through_9(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_cut_plan_json()
         )
         service = _make_service(mock_genai_client)
@@ -84,14 +92,14 @@ class TestCutPlannerServiceHappyPath:
             scene_breakdown=sample_scene_breakdown,
             character_sheet=sample_character_sheet,
         )
-        result = service.plan(req)
+        result = await service.plan(req)
         cut_numbers = sorted(c.cut_number for c in result.cuts)
-        assert cut_numbers == list(range(1, 13))
+        assert cut_numbers == list(range(1, 10))
 
-    def test_plan_calls_generate_content_with_json_mime_type(
+    async def test_plan_calls_generate_content_with_json_mime_type(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_cut_plan_json()
         )
         service = _make_service(mock_genai_client)
@@ -100,8 +108,8 @@ class TestCutPlannerServiceHappyPath:
             scene_breakdown=sample_scene_breakdown,
             character_sheet=sample_character_sheet,
         )
-        service.plan(req)
-        call_kwargs = mock_genai_client.models.generate_content.call_args
+        await service.plan(req)
+        call_kwargs = mock_genai_client.aio.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config")
         assert config.response_mime_type == "application/json"
 
@@ -111,33 +119,33 @@ class TestCutPlannerServiceHappyPath:
 # ---------------------------------------------------------------------------
 
 class TestCutPlannerMarkdownFences:
-    def test_plan_strips_json_markdown_fence(
+    async def test_plan_strips_json_markdown_fence(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
         fenced = f"```json\n{_valid_cut_plan_json()}\n```"
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(fenced)
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(fenced)
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
             scene_breakdown=sample_scene_breakdown,
             character_sheet=sample_character_sheet,
         )
-        result = service.plan(req)
-        assert len(result.cuts) == 12
+        result = await service.plan(req)
+        assert len(result.cuts) == 9
 
-    def test_plan_strips_plain_code_fence(
+    async def test_plan_strips_plain_code_fence(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
         fenced = f"```\n{_valid_cut_plan_json()}\n```"
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(fenced)
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(fenced)
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
             scene_breakdown=sample_scene_breakdown,
             character_sheet=sample_character_sheet,
         )
-        result = service.plan(req)
-        assert len(result.cuts) == 12
+        result = await service.plan(req)
+        assert len(result.cuts) == 9
 
 
 # ---------------------------------------------------------------------------
@@ -145,10 +153,10 @@ class TestCutPlannerMarkdownFences:
 # ---------------------------------------------------------------------------
 
 class TestCutPlannerErrorHandling:
-    def test_plan_raises_gemini_api_error_on_invalid_json(
+    async def test_plan_raises_gemini_api_error_on_invalid_json(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             "not valid json {{{"
         )
         service = _make_service(mock_genai_client)
@@ -158,12 +166,12 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(GeminiAPIError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_raises_quota_exceeded_on_429(
+    async def test_plan_raises_quota_exceeded_on_429(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("429 quota exceeded")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("429 quota exceeded")
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -171,12 +179,12 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(QuotaExceededError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_raises_quota_exceeded_on_resource_exhausted(
+    async def test_plan_raises_quota_exceeded_on_resource_exhausted(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("RESOURCE_EXHAUSTED")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("RESOURCE_EXHAUSTED")
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -184,12 +192,12 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(QuotaExceededError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_raises_safety_block_on_safety_error(
+    async def test_plan_raises_safety_block_on_safety_error(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("safety block triggered")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("safety block triggered")
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -197,12 +205,12 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(SafetyBlockError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_raises_gemini_api_error_on_generic_exception(
+    async def test_plan_raises_gemini_api_error_on_generic_exception(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("network timeout")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("network timeout")
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -210,12 +218,12 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(GeminiAPIError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_re_raises_quota_exceeded_without_wrapping(
+    async def test_plan_re_raises_quota_exceeded_without_wrapping(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = QuotaExceededError()
+        mock_genai_client.aio.models.generate_content.side_effect = QuotaExceededError()
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -223,12 +231,12 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(QuotaExceededError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_re_raises_safety_block_without_wrapping(
+    async def test_plan_re_raises_safety_block_without_wrapping(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = SafetyBlockError()
+        mock_genai_client.aio.models.generate_content.side_effect = SafetyBlockError()
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -236,15 +244,15 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(SafetyBlockError):
-            service.plan(req)
+            await service.plan(req)
 
-    def test_plan_handles_response_text_none(
+    async def test_plan_handles_response_text_none(
         self, mock_genai_client, sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
         """None text falls back to '{}', which fails CutPlan validation -> GeminiAPIError or similar."""
         response = MagicMock()
         response.text = None
-        mock_genai_client.models.generate_content.return_value = response
+        mock_genai_client.aio.models.generate_content.return_value = response
         service = _make_service(mock_genai_client)
         req = CutPlanRequest(
             novel_input=sample_novel_input,
@@ -252,7 +260,7 @@ class TestCutPlannerErrorHandling:
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(Exception):
-            service.plan(req)
+            await service.plan(req)
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +279,7 @@ class TestCutPlannerRouter:
         self, test_client, mock_genai_client,
         sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_cut_plan_json()
         )
         response = test_client.post(
@@ -281,7 +289,7 @@ class TestCutPlannerRouter:
         assert response.status_code == 200
         data = response.json()
         assert "cuts" in data
-        assert len(data["cuts"]) == 12
+        assert len(data["cuts"]) == 9
 
     def test_cut_plan_returns_422_on_missing_fields(self, test_client):
         response = test_client.post("/api/pipeline/cut-plan", json={})
@@ -291,7 +299,7 @@ class TestCutPlannerRouter:
         self, test_client, mock_genai_client,
         sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("429 quota exceeded")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("429 quota exceeded")
         response = test_client.post(
             "/api/pipeline/cut-plan",
             json=self._valid_payload(sample_novel_input, sample_scene_breakdown, sample_character_sheet),
@@ -302,7 +310,7 @@ class TestCutPlannerRouter:
         self, test_client, mock_genai_client,
         sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("safety block triggered")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("safety block triggered")
         response = test_client.post(
             "/api/pipeline/cut-plan",
             json=self._valid_payload(sample_novel_input, sample_scene_breakdown, sample_character_sheet),
@@ -313,7 +321,7 @@ class TestCutPlannerRouter:
         self, test_client, mock_genai_client,
         sample_novel_input, sample_scene_breakdown, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("network timeout")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("network timeout")
         response = test_client.post(
             "/api/pipeline/cut-plan",
             json=self._valid_payload(sample_novel_input, sample_scene_breakdown, sample_character_sheet),

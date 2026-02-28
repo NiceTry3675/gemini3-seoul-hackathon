@@ -60,7 +60,7 @@ class TestCORS:
 class TestDomainExceptionFormat:
     def test_quota_exceeded_error_format(self, test_client, mock_genai_client):
         """QuotaExceededError should return JSON {"error": "..."} with status 429."""
-        mock_genai_client.models.generate_content.side_effect = Exception("429 quota exceeded")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("429 quota exceeded")
         response = test_client.post("/api/text/generate", json={"prompt": "test"})
         assert response.status_code == 429
         body = response.json()
@@ -69,7 +69,7 @@ class TestDomainExceptionFormat:
 
     def test_safety_block_error_format(self, test_client, mock_genai_client):
         """SafetyBlockError should return JSON {"error": "..."} with status 422."""
-        mock_genai_client.models.generate_content.side_effect = Exception("safety block")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("safety block")
         response = test_client.post("/api/text/generate", json={"prompt": "test"})
         assert response.status_code == 422
         body = response.json()
@@ -77,7 +77,7 @@ class TestDomainExceptionFormat:
 
     def test_gemini_api_error_format(self, test_client, mock_genai_client):
         """GeminiAPIError should return JSON {"error": "..."} with status 502."""
-        mock_genai_client.models.generate_content.side_effect = Exception("network failure")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("network failure")
         response = test_client.post("/api/text/generate", json={"prompt": "test"})
         assert response.status_code == 502
         body = response.json()
@@ -85,7 +85,7 @@ class TestDomainExceptionFormat:
 
     def test_error_body_has_no_extra_fields(self, test_client, mock_genai_client):
         """Error responses should only contain the 'error' key."""
-        mock_genai_client.models.generate_content.side_effect = Exception("429 quota exceeded")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("429 quota exceeded")
         response = test_client.post("/api/text/generate", json={"prompt": "test"})
         body = response.json()
         # Only "error" key should be present

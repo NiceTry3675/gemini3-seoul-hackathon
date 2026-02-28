@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,11 +28,7 @@ def pytest_configure(config):
 # Mock genai.Client fixture
 # ---------------------------------------------------------------------------
 
-@pytest.fixture
-def mock_genai_client():
-    """Return a MagicMock that mimics google.genai.Client."""
-    client = MagicMock()
-    # Default generate_content response
+def _default_response() -> MagicMock:
     response = MagicMock()
     response.text = "Hello, world!"
     response.usage_metadata = MagicMock(
@@ -41,7 +37,27 @@ def mock_genai_client():
         total_token_count=15,
     )
     response.candidates = []
-    client.models.generate_content.return_value = response
+    return response
+
+
+@pytest.fixture
+def mock_genai_client():
+    """Return a MagicMock that mimics google.genai.Client with async support.
+
+    Services use ``client.aio.models.generate_content`` (async).
+    Router/integration tests may still reference ``client.models.*`` via MagicMock fallback.
+    """
+    client = MagicMock()
+    default_resp = _default_response()
+
+    # Sync fallback (legacy tests / MagicMock auto-attr)
+    client.models.generate_content.return_value = default_resp
+
+    # Async path used by all services
+    client.aio.models.generate_content = AsyncMock(return_value=default_resp)
+    client.aio.models.generate_videos = AsyncMock()
+    client.aio.operations.get = AsyncMock()
+
     return client
 
 
@@ -129,12 +145,12 @@ def sample_character_sheet():
 
 @pytest.fixture
 def sample_cut_plan():
-    """A valid CutPlan with exactly 12 cuts."""
+    """A valid CutPlan with exactly 9 cuts."""
     from app.domain.cut_planner.schemas import Cut, CutPlan
     cuts = [
         Cut(
             cut_number=i,
-            scene_ref=1 if i <= 6 else 2,
+            scene_ref=1 if i <= 5 else 2,
             description=f"Cut {i} description",
             dialogue=[f"Dialogue for cut {i}"],
             narration=f"Narration for cut {i}",
@@ -142,7 +158,7 @@ def sample_cut_plan():
             emotion="neutral",
             image_prompt=f"image prompt for cut {i}",
         )
-        for i in range(1, 13)
+        for i in range(1, 10)
     ]
     return CutPlan(cuts=cuts)
 

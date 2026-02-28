@@ -31,20 +31,20 @@ class ValidatorService:
         cuts = request.cut_plan.cuts
         character_names = {c.name for c in request.character_sheet.characters}
 
-        # Check exactly 12 cuts
-        if len(cuts) != 12:
+        # Check exactly 9 cuts
+        if len(cuts) != 9:
             issues.append(ValidationIssue(
                 issue_type="cut_count",
-                description=f"Expected 12 cuts, got {len(cuts)}",
+                description=f"Expected 9 cuts, got {len(cuts)}",
                 severity="error",
             ))
 
-        # Check cut numbers are 1-12 and unique
+        # Check cut numbers are 1-9 and unique
         cut_numbers = [c.cut_number for c in cuts]
-        if sorted(cut_numbers) != list(range(1, 13)):
+        if sorted(cut_numbers) != list(range(1, 10)):
             issues.append(ValidationIssue(
                 issue_type="cut_numbering",
-                description="Cut numbers must be unique integers from 1 to 12",
+                description="Cut numbers must be unique integers from 1 to 9",
                 severity="error",
             ))
 

@@ -56,7 +56,7 @@ class TestGeminiVideoServiceGenerate:
     async def test_generate_returns_video_base64(self, mock_genai_client):
         video_bytes = b"test-video-content"
         operation = _make_completed_operation(video_bytes)
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="A sunset over the ocean")
@@ -70,81 +70,81 @@ class TestGeminiVideoServiceGenerate:
     async def test_generate_polls_until_done(self, mock_genai_client):
         video_bytes = b"polled-video"
         initial, completed = _make_polling_operation(video_bytes)
-        mock_genai_client.models.generate_videos.return_value = initial
-        mock_genai_client.operations.get.return_value = completed
+        mock_genai_client.aio.models.generate_videos.return_value = initial
+        mock_genai_client.aio.operations.get.return_value = completed
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="A cat playing")
         result = await service.generate(request)
 
-        mock_genai_client.operations.get.assert_called_once_with(initial)
+        mock_genai_client.aio.operations.get.assert_called_once_with(initial)
         expected_b64 = base64.b64encode(video_bytes).decode("utf-8")
         assert result.video_base64 == expected_b64
 
     @pytest.mark.asyncio
     async def test_generate_passes_aspect_ratio(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="test", aspect_ratio="9:16")
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         config = call_kwargs.kwargs.get("config")
         assert config.aspect_ratio == "9:16"
 
     @pytest.mark.asyncio
     async def test_generate_passes_negative_prompt(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="test", negative_prompt="blurry")
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         config = call_kwargs.kwargs.get("config")
         assert config.negative_prompt == "blurry"
 
     @pytest.mark.asyncio
     async def test_generate_raises_quota_exceeded_on_429(self, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("429 quota exceeded")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("429 quota exceeded")
         service = _make_service(mock_genai_client)
         with pytest.raises(QuotaExceededError):
             await service.generate(VideoGenerationRequest(prompt="test"))
 
     @pytest.mark.asyncio
     async def test_generate_raises_quota_exceeded_on_resource_exhausted(self, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("RESOURCE_EXHAUSTED")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("RESOURCE_EXHAUSTED")
         service = _make_service(mock_genai_client)
         with pytest.raises(QuotaExceededError):
             await service.generate(VideoGenerationRequest(prompt="test"))
 
     @pytest.mark.asyncio
     async def test_generate_raises_safety_block(self, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("safety block triggered")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("safety block triggered")
         service = _make_service(mock_genai_client)
         with pytest.raises(SafetyBlockError):
             await service.generate(VideoGenerationRequest(prompt="test"))
 
     @pytest.mark.asyncio
     async def test_generate_raises_gemini_api_error_on_generic_exception(self, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("network timeout")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("network timeout")
         service = _make_service(mock_genai_client)
         with pytest.raises(GeminiAPIError):
             await service.generate(VideoGenerationRequest(prompt="test"))
 
     @pytest.mark.asyncio
     async def test_generate_re_raises_quota_exceeded_without_wrapping(self, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = QuotaExceededError()
+        mock_genai_client.aio.models.generate_videos.side_effect = QuotaExceededError()
         service = _make_service(mock_genai_client)
         with pytest.raises(QuotaExceededError):
             await service.generate(VideoGenerationRequest(prompt="test"))
 
     @pytest.mark.asyncio
     async def test_generate_re_raises_safety_block_without_wrapping(self, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = SafetyBlockError()
+        mock_genai_client.aio.models.generate_videos.side_effect = SafetyBlockError()
         service = _make_service(mock_genai_client)
         with pytest.raises(SafetyBlockError):
             await service.generate(VideoGenerationRequest(prompt="test"))
@@ -158,7 +158,7 @@ class TestVideoServiceReferenceImages:
     @pytest.mark.asyncio
     async def test_single_reference_image(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         img_data = base64.b64encode(b"ref-image").decode()
@@ -168,14 +168,14 @@ class TestVideoServiceReferenceImages:
         )
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         config = call_kwargs.kwargs["config"]
         assert len(config.reference_images) == 1
 
     @pytest.mark.asyncio
     async def test_multiple_reference_images(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         refs = [
@@ -186,20 +186,20 @@ class TestVideoServiceReferenceImages:
         request = VideoGenerationRequest(prompt="test", reference_images=refs)
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         config = call_kwargs.kwargs["config"]
         assert len(config.reference_images) == 3
 
     @pytest.mark.asyncio
     async def test_no_reference_images_omits_config_field(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="test")
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         config = call_kwargs.kwargs["config"]
         assert not hasattr(config, "reference_images") or config.reference_images is None
 
@@ -220,7 +220,7 @@ class TestVideoServiceFrames:
     @pytest.mark.asyncio
     async def test_first_frame_passed_as_image_kwarg(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         frame_data = base64.b64encode(b"first-frame").decode()
@@ -230,13 +230,13 @@ class TestVideoServiceFrames:
         )
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         assert "image" in call_kwargs.kwargs
 
     @pytest.mark.asyncio
     async def test_last_frame_passed_in_config(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         frame_data = base64.b64encode(b"last-frame").decode()
@@ -246,14 +246,14 @@ class TestVideoServiceFrames:
         )
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         config = call_kwargs.kwargs["config"]
         assert config.last_frame is not None
 
     @pytest.mark.asyncio
     async def test_both_frames_for_interpolation(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         first_data = base64.b64encode(b"first").decode()
@@ -265,7 +265,7 @@ class TestVideoServiceFrames:
         )
         result = await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         assert "image" in call_kwargs.kwargs
         assert call_kwargs.kwargs["config"].last_frame is not None
         assert result.video_base64 is not None
@@ -273,13 +273,13 @@ class TestVideoServiceFrames:
     @pytest.mark.asyncio
     async def test_no_frames_omits_image_kwarg(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="test")
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         assert "image" not in call_kwargs.kwargs
 
 
@@ -291,7 +291,7 @@ class TestVideoServiceSceneExtension:
     @pytest.mark.asyncio
     async def test_extend_video_passes_video_kwarg(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         prev_video = base64.b64encode(b"previous-video-data").decode()
@@ -301,26 +301,26 @@ class TestVideoServiceSceneExtension:
         )
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         assert "video" in call_kwargs.kwargs
 
     @pytest.mark.asyncio
     async def test_no_extend_omits_video_kwarg(self, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         request = VideoGenerationRequest(prompt="test")
         await service.generate(request)
 
-        call_kwargs = mock_genai_client.models.generate_videos.call_args
+        call_kwargs = mock_genai_client.aio.models.generate_videos.call_args
         assert "video" not in call_kwargs.kwargs
 
     @pytest.mark.asyncio
     async def test_extend_video_returns_new_video(self, mock_genai_client):
         extended_bytes = b"extended-video-output"
         operation = _make_completed_operation(extended_bytes)
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         prev_video = base64.b64encode(b"prev").decode()
@@ -346,8 +346,8 @@ class TestVideoServiceTimeout:
 
         never_done = MagicMock()
         never_done.done = False
-        mock_genai_client.models.generate_videos.return_value = never_done
-        mock_genai_client.operations.get.return_value = never_done
+        mock_genai_client.aio.models.generate_videos.return_value = never_done
+        mock_genai_client.aio.operations.get.return_value = never_done
 
         service = _make_service(mock_genai_client)
         with pytest.raises(GeminiAPIError, match="timed out"):
@@ -358,7 +358,7 @@ class TestVideoServiceTimeout:
         operation = MagicMock()
         operation.done = True
         operation.response.generated_videos = []
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         service = _make_service(mock_genai_client)
         with pytest.raises(GeminiAPIError, match="no results"):
@@ -372,7 +372,7 @@ class TestVideoServiceTimeout:
 class TestVideoGenerationRouter:
     def test_generate_returns_200(self, test_client, mock_genai_client):
         operation = _make_completed_operation(b"router-video")
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         response = test_client.post(
             "/api/video/generate",
@@ -385,7 +385,7 @@ class TestVideoGenerationRouter:
 
     def test_generate_with_aspect_ratio(self, test_client, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
 
         response = test_client.post(
             "/api/video/generate",
@@ -398,24 +398,24 @@ class TestVideoGenerationRouter:
         assert response.status_code == 422
 
     def test_generate_quota_exceeded_returns_429(self, test_client, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("429 quota exceeded")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("429 quota exceeded")
         response = test_client.post("/api/video/generate", json={"prompt": "test"})
         assert response.status_code == 429
         assert response.json()["error"] is not None
 
     def test_generate_safety_block_returns_422(self, test_client, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("safety block")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("safety block")
         response = test_client.post("/api/video/generate", json={"prompt": "test"})
         assert response.status_code == 422
 
     def test_generate_generic_error_returns_502(self, test_client, mock_genai_client):
-        mock_genai_client.models.generate_videos.side_effect = Exception("network timeout")
+        mock_genai_client.aio.models.generate_videos.side_effect = Exception("network timeout")
         response = test_client.post("/api/video/generate", json={"prompt": "test"})
         assert response.status_code == 502
 
     def test_generate_with_reference_images(self, test_client, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
         img_data = base64.b64encode(b"ref").decode()
         response = test_client.post(
             "/api/video/generate",
@@ -428,7 +428,7 @@ class TestVideoGenerationRouter:
 
     def test_generate_with_first_frame(self, test_client, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
         frame_data = base64.b64encode(b"frame").decode()
         response = test_client.post(
             "/api/video/generate",
@@ -441,7 +441,7 @@ class TestVideoGenerationRouter:
 
     def test_generate_with_scene_extension(self, test_client, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
         video_data = base64.b64encode(b"prev-video").decode()
         response = test_client.post(
             "/api/video/generate",
@@ -454,7 +454,7 @@ class TestVideoGenerationRouter:
 
     def test_generate_with_all_features(self, test_client, mock_genai_client):
         operation = _make_completed_operation()
-        mock_genai_client.models.generate_videos.return_value = operation
+        mock_genai_client.aio.models.generate_videos.return_value = operation
         img_data = base64.b64encode(b"img").decode()
         frame_data = base64.b64encode(b"frame").decode()
         response = test_client.post(

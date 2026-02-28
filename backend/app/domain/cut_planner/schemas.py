@@ -13,7 +13,7 @@ class CutPlanRequest(BaseModel):
 
 
 class Cut(BaseModel):
-    cut_number: int = Field(..., ge=1, le=12)
+    cut_number: int = Field(..., ge=1, le=9)
     scene_ref: int = Field(..., ge=1)
     description: str
     dialogue: list[str] = Field(default_factory=list)
@@ -24,4 +24,4 @@ class Cut(BaseModel):
 
 
 class CutPlan(BaseModel):
-    cuts: list[Cut] = Field(..., min_length=12, max_length=12)
+    cuts: list[Cut] = Field(..., min_length=9, max_length=9)

@@ -102,22 +102,22 @@ def patched_services(
     sample_cut_plan,
 ):
     """Wire all sub-service mocks with default happy-path return values."""
-    mock_scene_parser.parse.return_value = sample_scene_breakdown
+    mock_scene_parser.parse = AsyncMock(return_value=sample_scene_breakdown)
 
     char_resp = MagicMock()
     char_resp.character_sheet = sample_character_sheet
     char_resp.reference_images = {"Alice": "ref_b64_alice", "Bob": "ref_b64_bob"}
-    mock_char_gen.generate.return_value = char_resp
+    mock_char_gen.generate = AsyncMock(return_value=char_resp)
 
-    mock_cut_planner.plan.return_value = sample_cut_plan
+    mock_cut_planner.plan = AsyncMock(return_value=sample_cut_plan)
 
     from app.domain.validator.schemas import ValidationReport
     valid_report = ValidationReport(is_valid=True, issues=[], summary="Validation passed: 0 error(s), 0 warning(s).")
-    mock_validator.validate.return_value = valid_report
+    mock_validator.validate = AsyncMock(return_value=valid_report)
 
     from app.domain.image_generation.schemas import ImageGenerationResponse
     img_resp = ImageGenerationResponse(image_base64="base64data", mime_type="image/png")
-    mock_image_gen.generate.return_value = img_resp
+    mock_image_gen.generate = AsyncMock(return_value=img_resp)
 
     from app.domain.video_generation.schemas import VideoGenerationResponse
     vid_resp = VideoGenerationResponse(video_base64="video_b64_data", mime_type="video/mp4")
@@ -166,7 +166,7 @@ class TestContiOrchestratorHappyPath:
         result_data = _parse_data(_result_events(events)[0])
         assert "characters" in result_data
         assert "cuts" in result_data
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
 
     @pytest.mark.asyncio
     async def test_result_event_contains_validation_report(
@@ -389,13 +389,13 @@ class TestContiOrchestratorValidationRetry:
 
 class TestContiOrchestratorImageGeneration:
     @pytest.mark.asyncio
-    async def test_all_images_succeed_result_has_12_cuts(
+    async def test_all_images_succeed_result_has_9_cuts(
         self, mock_genai_client, patched_services
     ):
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
 
     @pytest.mark.asyncio
     async def test_image_failure_results_in_empty_image_base64(
@@ -420,8 +420,8 @@ class TestContiOrchestratorImageGeneration:
         good_resp = ImageGenerationResponse(image_base64="gooddata", mime_type="image/png")
 
         def side_effect(req):
-            # Only the first cut's prompt ends in "cut 1" — succeed for it, fail for rest
-            if req.prompt.endswith("cut 1"):
+            # Only the first cut's prompt contains "cut 1" — succeed for it, fail for rest
+            if "cut 1" in req.prompt:
                 return good_resp
             raise Exception("fail for this cut")
 
@@ -429,7 +429,7 @@ class TestContiOrchestratorImageGeneration:
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
         successful = [c for c in result_data["cuts"] if c["image_base64"] != ""]
         failed = [c for c in result_data["cuts"] if c["image_base64"] == ""]
         assert len(successful) >= 1
@@ -448,7 +448,7 @@ class TestContiOrchestratorImageGeneration:
         def side_effect(req):
             call_count[0] += 1
             # First two calls per cut fail, third succeeds
-            # Since there are 12 cuts, track total calls
+            # Since there are 9 cuts, track total calls
             if call_count[0] % 3 != 0:
                 raise Exception("temporary failure")
             return good_resp
@@ -458,21 +458,21 @@ class TestContiOrchestratorImageGeneration:
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
         # At least some cuts should have succeeded via retry
-        assert len(result_data["cuts"]) == 12
+        assert len(result_data["cuts"]) == 9
 
     @pytest.mark.asyncio
     async def test_images_generated_in_batches_of_3(
         self, mock_genai_client, patched_services
     ):
-        """12 cuts should produce 4 batches of 3; verify step 5 emits batch progress events."""
+        """9 cuts should produce 3 batches of 3; verify step 5 emits batch progress events."""
         service = _make_service(mock_genai_client)
         events = await _collect_events(service.generate(_make_conti_request()))
         progress = _progress_events(events)
         step5_events = [_parse_data(e) for e in progress if _parse_data(e)["step"] == 5]
-        # Should have: 1 "running" start + 4 batch progress "running" + 1 "completed"
+        # Should have: 1 "running" start + 3 batch progress "running" + 1 "completed"
         running_events = [e for e in step5_events if e["status"] == "running"]
-        # At least the initial + 4 batch updates
-        assert len(running_events) >= 4
+        # At least the initial + 3 batch updates
+        assert len(running_events) >= 3
 
     @pytest.mark.asyncio
     async def test_result_cut_contains_correct_fields(
@@ -564,6 +564,14 @@ class TestContiGenerateRouter:
         from app.domain.validator.schemas import ValidationReport
         from app.domain.image_generation.schemas import ImageGenerationResponse
         from app.domain.video_generation.schemas import VideoGenerationResponse
+        from app.domain.conti.router import _get_repo
+        from app.main import app
+
+        mock_repo = MagicMock()
+        mock_repo.create_run = AsyncMock(return_value="test-run-id")
+        mock_repo.save_step = AsyncMock()
+        mock_repo.save_result = AsyncMock()
+        mock_repo.mark_failed = AsyncMock()
 
         with (
             patch("app.domain.conti.service.SceneParserService") as sp_cls,
@@ -573,24 +581,28 @@ class TestContiGenerateRouter:
             patch("app.domain.conti.service.GeminiImageService") as ig_cls,
             patch("app.domain.conti.service.GeminiVideoService") as vg_cls,
         ):
-            sp_cls.return_value.parse.return_value = sample_scene_breakdown
+            sp_cls.return_value.parse = AsyncMock(return_value=sample_scene_breakdown)
             char_resp = MagicMock()
             char_resp.character_sheet = sample_character_sheet
             char_resp.reference_images = {}
-            cg_cls.return_value.generate.return_value = char_resp
-            cp_cls.return_value.plan.return_value = sample_cut_plan
-            v_cls.return_value.validate.return_value = ValidationReport(
+            cg_cls.return_value.generate = AsyncMock(return_value=char_resp)
+            cp_cls.return_value.plan = AsyncMock(return_value=sample_cut_plan)
+            v_cls.return_value.validate = AsyncMock(return_value=ValidationReport(
                 is_valid=True, issues=[], summary="OK"
-            )
-            ig_cls.return_value.generate.return_value = ImageGenerationResponse(
+            ))
+            ig_cls.return_value.generate = AsyncMock(return_value=ImageGenerationResponse(
                 image_base64="data", mime_type="image/png"
-            )
-            vg_cls.return_value.generate.return_value = VideoGenerationResponse(
+            ))
+            vg_cls.return_value.generate = AsyncMock(return_value=VideoGenerationResponse(
                 video_base64="vid", mime_type="video/mp4"
-            )
+            ))
 
-            response = test_client.post("/api/pipeline/generate", json=self._valid_payload())
-            assert response.status_code == 200
+            app.dependency_overrides[_get_repo] = lambda: mock_repo
+            try:
+                response = test_client.post("/api/pipeline/generate", json=self._valid_payload())
+                assert response.status_code == 200
+            finally:
+                app.dependency_overrides.pop(_get_repo, None)
 
     def test_generate_returns_422_on_missing_manuscript(self, test_client):
         response = test_client.post(
@@ -620,15 +632,17 @@ class TestContiOrchestratorReferenceImages:
         events = await _collect_events(service.generate(_make_conti_request()))
         result_data = _parse_data(_result_events(events)[0])
 
-        # reference_images should appear in the result
-        assert result_data["reference_images"] == {"Alice": "ref_b64_alice", "Bob": "ref_b64_bob"}
+        # reference_images should contain character refs + anchor
+        assert "Alice" in result_data["reference_images"]
+        assert "Bob" in result_data["reference_images"]
 
-        # image_gen.generate should have been called with reference_images
+        # image_gen.generate should have been called with reference_images including character refs
         calls = patched_services["image_gen"].generate.call_args_list
         assert len(calls) > 0
         for call in calls:
             req = call[0][0]
-            assert req.reference_images == {"Alice": "ref_b64_alice", "Bob": "ref_b64_bob"}
+            assert "Alice" in req.reference_images
+            assert "Bob" in req.reference_images
 
     @pytest.mark.asyncio
     async def test_empty_reference_images_still_works(
@@ -713,7 +727,7 @@ class TestContiOrchestratorGenerateMediaBatch:
         )
         service = _make_service(mock_genai_client)
         resp = await service.generate_media_batch(req)
-        assert len(resp.cuts) == 12
+        assert len(resp.cuts) == 9
         for cut in resp.cuts:
             assert cut.image_base64 == "base64data"
             assert cut.video_base64 == ""
@@ -730,7 +744,7 @@ class TestContiOrchestratorGenerateMediaBatch:
         )
         service = _make_service(mock_genai_client)
         resp = await service.generate_media_batch(req)
-        assert len(resp.cuts) == 12
+        assert len(resp.cuts) == 9
         for cut in resp.cuts:
             assert cut.image_base64 == ""
             assert cut.video_base64 == "video_b64_data"
@@ -747,7 +761,7 @@ class TestContiOrchestratorGenerateMediaBatch:
         )
         service = _make_service(mock_genai_client)
         resp = await service.generate_media_batch(req)
-        assert len(resp.cuts) == 12
+        assert len(resp.cuts) == 9
         for cut in resp.cuts:
             assert cut.image_base64 == "base64data"
             assert cut.video_base64 == "video_b64_data"
@@ -781,12 +795,12 @@ class TestGenerateMediaRouter:
             patch("app.domain.conti.service.GeminiImageService") as ig_cls,
             patch("app.domain.conti.service.GeminiVideoService") as vg_cls,
         ):
-            ig_cls.return_value.generate.return_value = ImageGenerationResponse(
+            ig_cls.return_value.generate = AsyncMock(return_value=ImageGenerationResponse(
                 image_base64="data", mime_type="image/png"
-            )
-            vg_cls.return_value.generate.return_value = VideoGenerationResponse(
+            ))
+            vg_cls.return_value.generate = AsyncMock(return_value=VideoGenerationResponse(
                 video_base64="vid", mime_type="video/mp4"
-            )
+            ))
 
             response = test_client.post(
                 "/api/pipeline/step/generate-media",
@@ -794,7 +808,7 @@ class TestGenerateMediaRouter:
             )
             assert response.status_code == 200
             data = response.json()
-            assert len(data["cuts"]) == 12
+            assert len(data["cuts"]) == 9
 
     def test_generate_media_returns_422_on_invalid_body(self, test_client):
         response = test_client.post(

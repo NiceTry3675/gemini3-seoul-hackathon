@@ -7,7 +7,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.shared.client import get_genai_client
 from app.shared.database import get_db
-from app.domain.conti.schemas import ContiRequest, GenerateMediaRequest, GenerateMediaResponse, RunSummary, RunDetail
+from app.domain.conti.schemas import ContiRequest, GenerateMediaRequest, GenerateMediaResponse, PromptPreviewResult, RunSummary, RunDetail
 from app.domain.conti.service import ContiOrchestratorService
 from app.domain.conti.repository import PipelineRepository
 
@@ -36,6 +36,14 @@ async def generate_conti(
             yield event
 
     return EventSourceResponse(event_stream())
+
+
+@router.post("/preview", response_model=PromptPreviewResult)
+async def preview_prompts(
+    request: ContiRequest,
+    service: ContiOrchestratorService = Depends(_get_service),
+) -> PromptPreviewResult:
+    return await service.preview(request)
 
 
 @router.post("/step/generate-media", response_model=GenerateMediaResponse)

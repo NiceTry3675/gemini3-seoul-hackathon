@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 from google import genai
 
 from app.exceptions import GeminiAPIError, QuotaExceededError, SafetyBlockError
+from app.prompt_manager import get_prompt_manager
 from app.shared.client import get_genai_client
 from app.domain.scene_parser.schemas import NovelInput
 from app.domain.scene_parser.service import SceneParserService
@@ -28,24 +29,48 @@ from app.domain.conti.schemas import (
     GenerateMediaRequest,
     GenerateMediaResponse,
     PipelineProgress,
+    PromptPreviewCut,
+    PromptPreviewResult,
 )
 
 logger = logging.getLogger(__name__)
 
-_BATCH_SIZE = 3
-_BATCH_DELAY = 2.0
 _IMAGE_MAX_RETRIES = 3
 
 
 class ContiOrchestratorService:
     def __init__(self, client: genai.Client) -> None:
         self._client = client
+        self._pm = get_prompt_manager()
         self._scene_parser = SceneParserService(client)
         self._char_gen = CharacterGenService(client)
         self._cut_planner = CutPlannerService(client)
         self._validator = ValidatorService(client)
         self._image_gen = GeminiImageService(client)
         self._video_gen = GeminiVideoService(client)
+
+    def _style_descriptor(self, style_template: str) -> str:
+        try:
+            return self._pm.get_system_instruction(f"style_templates.{style_template}")
+        except KeyError:
+            return ""
+
+    def _negative_hint(self) -> str:
+        try:
+            return self._pm.get_system_instruction("prompts.negative_hint")
+        except KeyError:
+            return ""
+
+    def _build_styled_prompt(self, image_prompt: str, style_template: str) -> str:
+        style = self._style_descriptor(style_template)
+        negative = self._negative_hint()
+        parts = []
+        if style:
+            parts.append(style)
+        parts.append(image_prompt)
+        if negative:
+            parts.append(negative)
+        return "\n\n".join(parts)
 
     def _sse_event(self, event: str, data: dict) -> dict:
         return {"event": event, "data": json.dumps(data, ensure_ascii=False)}
@@ -165,51 +190,68 @@ class ContiOrchestratorService:
             logger.warning("Validation step failed: %s; proceeding without validation.", exc)
             yield self._progress_event(4, "validate", "completed", "validation skipped due to error")
 
-        # Step 5: Media generation (image/video/mixed) in batches
+        # Step 5: Media generation — sequential with anchor + prev_panel ref chaining
         output_mode = request.output_mode
+        style_template = request.style_template
         media_label = "media" if output_mode != "image" else "images"
         yield self._progress_event(5, "media_gen", "running", f"generating {len(cut_plan.cuts)} {media_label}")
         generated_cuts: list[GeneratedCut] = []
-        cuts = cut_plan.cuts
+        cuts = sorted(cut_plan.cuts, key=lambda c: c.cut_number)
 
-        for batch_start in range(0, len(cuts), _BATCH_SIZE):
-            batch = cuts[batch_start: batch_start + _BATCH_SIZE]
+        # Generate anchor image from first character's visual_prompt
+        anchor_b64 = ""
+        if output_mode in ("image", "mixed") and character_sheet.characters:
+            anchor_char = character_sheet.characters[0]
+            anchor_prompt = self._build_styled_prompt(
+                f"Single character, clear full-body, neutral background, high readability. "
+                f"{anchor_char.visual_prompt}",
+                style_template,
+            )
+            anchor_b64, _ = await self._generate_image_with_retry(
+                anchor_prompt, 0, reference_images,
+            )
+            if anchor_b64:
+                reference_images["anchor"] = anchor_b64
 
-            batch_results: list[GeneratedCut] = []
-            for cut in batch:
-                image_base64, mime_type = "", "image/png"
-                video_base64, video_mime_type = "", ""
+        prev_panel_b64 = ""
+        for i, cut in enumerate(cuts):
+            image_base64, mime_type = "", "image/png"
+            video_base64, video_mime_type = "", ""
 
-                if output_mode in ("image", "mixed"):
-                    image_base64, mime_type = await self._generate_image_with_retry(
-                        cut.image_prompt, cut.cut_number, reference_images,
-                    )
-                if output_mode in ("video", "mixed"):
-                    video_base64, video_mime_type = await self._generate_video_with_retry(
-                        cut.image_prompt, cut.cut_number,
-                    )
+            if output_mode in ("image", "mixed"):
+                styled_prompt = self._build_styled_prompt(cut.image_prompt, style_template)
 
-                batch_results.append(GeneratedCut(
-                    cut_number=cut.cut_number,
-                    image_base64=image_base64,
-                    mime_type=mime_type,
-                    video_base64=video_base64,
-                    video_mime_type=video_mime_type,
-                    dialogue=cut.dialogue,
-                    narration=cut.narration,
-                    description=cut.description,
-                ))
+                # Build refs: character refs + anchor + previous panel
+                cut_refs = dict(reference_images)
+                if prev_panel_b64:
+                    cut_refs["previous_panel"] = prev_panel_b64
 
-            generated_cuts.extend(batch_results)
+                image_base64, mime_type = await self._generate_image_with_retry(
+                    styled_prompt, cut.cut_number, cut_refs,
+                )
+                if image_base64:
+                    prev_panel_b64 = image_base64
 
-            batch_end = min(batch_start + _BATCH_SIZE, len(cuts))
+            if output_mode in ("video", "mixed"):
+                video_base64, video_mime_type = await self._generate_video_with_retry(
+                    cut.image_prompt, cut.cut_number,
+                )
+
+            generated_cuts.append(GeneratedCut(
+                cut_number=cut.cut_number,
+                image_base64=image_base64,
+                mime_type=mime_type,
+                video_base64=video_base64,
+                video_mime_type=video_mime_type,
+                dialogue=cut.dialogue,
+                narration=cut.narration,
+                description=cut.description,
+            ))
+
             yield self._progress_event(
                 5, "media_gen", "running",
-                f"generated {batch_end}/{len(cuts)} {media_label}",
+                f"generated {i + 1}/{len(cuts)} {media_label}",
             )
-
-            if batch_end < len(cuts):
-                await asyncio.sleep(_BATCH_DELAY)
 
         yield self._progress_event(5, "media_gen", "completed", f"{len(generated_cuts)} {media_label} generated")
 
@@ -225,17 +267,27 @@ class ContiOrchestratorService:
     async def generate_media_batch(self, request: GenerateMediaRequest) -> GenerateMediaResponse:
         """Generate media (image/video/mixed) for a pre-built cut plan."""
         output_mode = request.output_mode
-        ref_images = request.reference_images
+        style_template = request.style_template
+        ref_images = dict(request.reference_images)
         generated_cuts: list[GeneratedCut] = []
 
-        for cut in request.cut_plan.cuts:
+        prev_panel_b64 = ""
+        for cut in sorted(request.cut_plan.cuts, key=lambda c: c.cut_number):
             image_base64, mime_type = "", "image/png"
             video_base64, video_mime_type = "", ""
 
             if output_mode in ("image", "mixed"):
+                styled_prompt = self._build_styled_prompt(cut.image_prompt, style_template)
+                cut_refs = dict(ref_images)
+                if prev_panel_b64:
+                    cut_refs["previous_panel"] = prev_panel_b64
+
                 image_base64, mime_type = await self._generate_image_with_retry(
-                    cut.image_prompt, cut.cut_number, ref_images,
+                    styled_prompt, cut.cut_number, cut_refs,
                 )
+                if image_base64:
+                    prev_panel_b64 = image_base64
+
             if output_mode in ("video", "mixed"):
                 video_base64, video_mime_type = await self._generate_video_with_retry(
                     cut.image_prompt, cut.cut_number,
@@ -253,6 +305,57 @@ class ContiOrchestratorService:
             ))
 
         return GenerateMediaResponse(cuts=generated_cuts)
+
+    async def preview(self, request: ContiRequest) -> PromptPreviewResult:
+        """Run steps 1-3 (parse, character gen, cut plan) and return styled prompts without generating images."""
+        novel_input = NovelInput(
+            manuscript=request.manuscript,
+            genre=request.genre,
+            tone=request.tone,
+            output_language=request.output_language,
+        )
+
+        scene_breakdown = await self._scene_parser.parse(novel_input)
+
+        char_req = CharacterGenRequest(novel_input=novel_input, scene_breakdown=scene_breakdown)
+        char_resp = await self._char_gen.generate(char_req)
+        character_sheet = char_resp.character_sheet
+
+        cut_req = CutPlanRequest(
+            novel_input=novel_input,
+            scene_breakdown=scene_breakdown,
+            character_sheet=character_sheet,
+        )
+        cut_plan = await self._cut_planner.plan(cut_req)
+
+        style_template = request.style_template
+        anchor_prompt = ""
+        if character_sheet.characters:
+            anchor_char = character_sheet.characters[0]
+            anchor_prompt = self._build_styled_prompt(
+                f"Single character, clear full-body, neutral background, high readability. "
+                f"{anchor_char.visual_prompt}",
+                style_template,
+            )
+
+        preview_cuts: list[PromptPreviewCut] = []
+        for i, cut in enumerate(sorted(cut_plan.cuts, key=lambda c: c.cut_number)):
+            styled = self._build_styled_prompt(cut.image_prompt, style_template)
+            refs = ["character_references", "anchor"]
+            if i > 0:
+                refs.append("previous_panel")
+            preview_cuts.append(PromptPreviewCut(
+                cut_number=cut.cut_number,
+                styled_prompt=styled,
+                reference_inputs=refs,
+            ))
+
+        return PromptPreviewResult(
+            cut_plan=cut_plan,
+            characters=character_sheet,
+            anchor_prompt=anchor_prompt,
+            cuts=preview_cuts,
+        )
 
     async def generate_and_persist(
         self, request: ContiRequest, run_id: str, repo: "PipelineRepository"

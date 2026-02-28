@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -40,8 +40,8 @@ def _make_cut(
 
 
 def _make_valid_cut_plan() -> CutPlan:
-    """12 cuts numbered 1-12, all with valid scene_refs and content."""
-    return CutPlan(cuts=[_make_cut(i) for i in range(1, 13)])
+    """9 cuts numbered 1-9, all with valid scene_refs and content."""
+    return CutPlan(cuts=[_make_cut(i) for i in range(1, 10)])
 
 
 def _valid_gemini_report_json(is_valid: bool = True) -> str:
@@ -53,12 +53,26 @@ def _valid_gemini_report_json(is_valid: bool = True) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Autouse fixture: patch get_prompt_manager so validator.instruction key
+# doesn't raise KeyError (the key is missing from system_instruction.toml).
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def mock_prompt_manager():
+    mock_pm = MagicMock()
+    mock_pm.get_system_instruction.return_value = "You are a validator."
+    with patch("app.domain.validator.service.get_prompt_manager", return_value=mock_pm):
+        yield mock_pm
+
+
+# ---------------------------------------------------------------------------
 # Service: validate — happy path
 # ---------------------------------------------------------------------------
 
 class TestValidatorServiceHappyPath:
-    def test_validate_returns_validation_report(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_validate_returns_validation_report(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         service = _make_service(mock_genai_client)
@@ -66,11 +80,12 @@ class TestValidatorServiceHappyPath:
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
-        result = service.validate(req)
+        result = await service.validate(req)
         assert isinstance(result, ValidationReport)
 
-    def test_validate_is_valid_true_when_no_errors(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_validate_is_valid_true_when_no_errors(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         service = _make_service(mock_genai_client)
@@ -78,11 +93,12 @@ class TestValidatorServiceHappyPath:
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
-        result = service.validate(req)
+        result = await service.validate(req)
         assert result.is_valid is True
 
-    def test_validate_includes_summary_string(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_validate_includes_summary_string(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         service = _make_service(mock_genai_client)
@@ -90,7 +106,7 @@ class TestValidatorServiceHappyPath:
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
-        result = service.validate(req)
+        result = await service.validate(req)
         assert isinstance(result.summary, str)
         assert len(result.summary) > 0
 
@@ -100,8 +116,9 @@ class TestValidatorServiceHappyPath:
 # ---------------------------------------------------------------------------
 
 class TestValidatorStructuralChecks:
-    def test_wrong_cut_count_produces_error_issue(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_wrong_cut_count_produces_error_issue(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         # CutPlan and ValidationRequest enforce Pydantic constraints, so mock the full request
@@ -114,14 +131,15 @@ class TestValidatorStructuralChecks:
         req.character_sheet = sample_character_sheet
 
         service = _make_service(mock_genai_client)
-        result = service.validate(req)
+        result = await service.validate(req)
 
         cut_count_issues = [i for i in result.issues if i.issue_type == "cut_count"]
         assert len(cut_count_issues) == 1
         assert cut_count_issues[0].severity == "error"
 
-    def test_wrong_cut_count_makes_is_valid_false(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_wrong_cut_count_makes_is_valid_false(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         plan = MagicMock()
@@ -133,11 +151,12 @@ class TestValidatorStructuralChecks:
         req.character_sheet = sample_character_sheet
 
         service = _make_service(mock_genai_client)
-        result = service.validate(req)
+        result = await service.validate(req)
         assert result.is_valid is False
 
-    def test_duplicate_cut_numbers_produces_numbering_error(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_duplicate_cut_numbers_produces_numbering_error(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         # 12 cuts where numbers are 1-11 + duplicate 1 (sorted != [1..12])
@@ -151,43 +170,45 @@ class TestValidatorStructuralChecks:
         req.character_sheet = sample_character_sheet
 
         service = _make_service(mock_genai_client)
-        result = service.validate(req)
+        result = await service.validate(req)
 
         numbering_issues = [i for i in result.issues if i.issue_type == "cut_numbering"]
         assert len(numbering_issues) >= 1
 
-    def test_empty_dialogue_and_narration_produces_warning(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_empty_dialogue_and_narration_produces_warning(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         cuts = [
             _make_cut(i, dialogue=[], narration="") if i == 5 else _make_cut(i)
-            for i in range(1, 13)
+            for i in range(1, 10)
         ]
         plan = CutPlan(cuts=cuts)
         service = _make_service(mock_genai_client)
         req = ValidationRequest(cut_plan=plan, character_sheet=sample_character_sheet)
-        result = service.validate(req)
+        result = await service.validate(req)
 
         empty_content_issues = [i for i in result.issues if i.issue_type == "empty_content"]
         assert len(empty_content_issues) == 1
         assert empty_content_issues[0].severity == "warning"
         assert empty_content_issues[0].cut_number == 5
 
-    def test_empty_content_warning_does_not_make_is_valid_false(self, mock_genai_client, sample_character_sheet):
+    @pytest.mark.asyncio
+    async def test_empty_content_warning_does_not_make_is_valid_false(self, mock_genai_client, sample_character_sheet):
         """Warnings alone don't set is_valid=False when there are no structural issues beyond warnings."""
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
-        # All 12 cuts present with empty dialogue+narration on one of them
+        # All 9 cuts present with empty dialogue+narration on one of them
         cuts = [
             _make_cut(i, dialogue=[], narration="") if i == 3 else _make_cut(i)
-            for i in range(1, 13)
+            for i in range(1, 10)
         ]
         plan = CutPlan(cuts=cuts)
         service = _make_service(mock_genai_client)
         req = ValidationRequest(cut_plan=plan, character_sheet=sample_character_sheet)
-        result = service.validate(req)
+        result = await service.validate(req)
 
         # is_valid = no errors AND len(structural_issues) == 0
         # A warning IS a structural issue, so is_valid will be False here
@@ -196,23 +217,24 @@ class TestValidatorStructuralChecks:
         assert len(structural_issues) == 1
         assert result.is_valid is False  # Because structural_issues is non-empty
 
-    def test_multiple_cuts_with_empty_content_produce_multiple_warnings(
+    @pytest.mark.asyncio
+    async def test_multiple_cuts_with_empty_content_produce_multiple_warnings(
         self, mock_genai_client, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         cuts = [
             _make_cut(i, dialogue=[], narration="")
-            for i in range(1, 13)
+            for i in range(1, 10)
         ]
         plan = CutPlan(cuts=cuts)
         service = _make_service(mock_genai_client)
         req = ValidationRequest(cut_plan=plan, character_sheet=sample_character_sheet)
-        result = service.validate(req)
+        result = await service.validate(req)
 
         empty_content_issues = [i for i in result.issues if i.issue_type == "empty_content"]
-        assert len(empty_content_issues) == 12
+        assert len(empty_content_issues) == 9
 
 
 # ---------------------------------------------------------------------------
@@ -220,33 +242,36 @@ class TestValidatorStructuralChecks:
 # ---------------------------------------------------------------------------
 
 class TestValidatorGeminiFailures:
-    def test_gemini_validation_failure_proceeds_with_structural_checks_only(
+    @pytest.mark.asyncio
+    async def test_gemini_validation_failure_proceeds_with_structural_checks_only(
         self, mock_genai_client, sample_character_sheet
     ):
         """When Gemini call fails, validate proceeds using structural checks only."""
-        mock_genai_client.models.generate_content.side_effect = Exception("network timeout")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("network timeout")
         service = _make_service(mock_genai_client)
         req = ValidationRequest(
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
         # Should not raise; structural checks pass for valid plan
-        result = service.validate(req)
+        result = await service.validate(req)
         assert isinstance(result, ValidationReport)
 
-    def test_gemini_validation_failure_with_valid_plan_returns_is_valid_true(
+    @pytest.mark.asyncio
+    async def test_gemini_validation_failure_with_valid_plan_returns_is_valid_true(
         self, mock_genai_client, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = Exception("server error")
+        mock_genai_client.aio.models.generate_content.side_effect = Exception("server error")
         service = _make_service(mock_genai_client)
         req = ValidationRequest(
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
-        result = service.validate(req)
+        result = await service.validate(req)
         assert result.is_valid is True
 
-    def test_gemini_returns_issues_combined_with_structural(
+    @pytest.mark.asyncio
+    async def test_gemini_returns_issues_combined_with_structural(
         self, mock_genai_client, sample_character_sheet
     ):
         """Gemini issues + structural issues are combined in the final report."""
@@ -258,59 +283,62 @@ class TestValidatorGeminiFailures:
             "issues": gemini_issues,
             "summary": "Narrative gap detected.",
         })
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(gemini_report)
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(gemini_report)
 
-        # Plan with an empty-content cut (structural warning) and all 12 cuts
+        # Plan with an empty-content cut (structural warning) and all 9 cuts
         cuts = [
             _make_cut(i, dialogue=[], narration="") if i == 1 else _make_cut(i)
-            for i in range(1, 13)
+            for i in range(1, 10)
         ]
         plan = CutPlan(cuts=cuts)
         service = _make_service(mock_genai_client)
         req = ValidationRequest(cut_plan=plan, character_sheet=sample_character_sheet)
-        result = service.validate(req)
+        result = await service.validate(req)
 
         structural = [i for i in result.issues if i.issue_type == "empty_content"]
         gemini = [i for i in result.issues if i.issue_type == "narrative_gap"]
         assert len(structural) == 1
         assert len(gemini) == 1
 
-    def test_quota_exceeded_in_gemini_validation_propagates(
+    @pytest.mark.asyncio
+    async def test_quota_exceeded_in_gemini_validation_propagates(
         self, mock_genai_client, sample_character_sheet
     ):
         """QuotaExceededError and SafetyBlockError are NOT caught; they propagate."""
-        mock_genai_client.models.generate_content.side_effect = QuotaExceededError()
+        mock_genai_client.aio.models.generate_content.side_effect = QuotaExceededError()
         service = _make_service(mock_genai_client)
         req = ValidationRequest(
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(QuotaExceededError):
-            service.validate(req)
+            await service.validate(req)
 
-    def test_safety_block_in_gemini_validation_propagates(
+    @pytest.mark.asyncio
+    async def test_safety_block_in_gemini_validation_propagates(
         self, mock_genai_client, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = SafetyBlockError()
+        mock_genai_client.aio.models.generate_content.side_effect = SafetyBlockError()
         service = _make_service(mock_genai_client)
         req = ValidationRequest(
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
         with pytest.raises(SafetyBlockError):
-            service.validate(req)
+            await service.validate(req)
 
-    def test_invalid_json_in_gemini_response_proceeds_with_structural_only(
+    @pytest.mark.asyncio
+    async def test_invalid_json_in_gemini_response_proceeds_with_structural_only(
         self, mock_genai_client, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response("not json {{")
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response("not json {{")
         service = _make_service(mock_genai_client)
         req = ValidationRequest(
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
         # Should not raise; falls back to structural only
-        result = service.validate(req)
+        result = await service.validate(req)
         assert isinstance(result, ValidationReport)
         assert result.is_valid is True  # structural checks pass for valid plan
 
@@ -320,10 +348,11 @@ class TestValidatorGeminiFailures:
 # ---------------------------------------------------------------------------
 
 class TestValidatorIsValidLogic:
-    def test_is_valid_false_when_structural_errors_present(
+    @pytest.mark.asyncio
+    async def test_is_valid_false_when_structural_errors_present(
         self, mock_genai_client, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         # Use a fully mocked request with only 6 cuts to trigger the structural cut_count error
@@ -336,10 +365,11 @@ class TestValidatorIsValidLogic:
         req.character_sheet = sample_character_sheet
 
         service = _make_service(mock_genai_client)
-        result = service.validate(req)
+        result = await service.validate(req)
         assert result.is_valid is False
 
-    def test_is_valid_false_when_gemini_returns_error_issue(
+    @pytest.mark.asyncio
+    async def test_is_valid_false_when_gemini_returns_error_issue(
         self, mock_genai_client, sample_character_sheet
     ):
         gemini_report = json.dumps({
@@ -349,17 +379,18 @@ class TestValidatorIsValidLogic:
             ],
             "summary": "Error found.",
         })
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(gemini_report)
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(gemini_report)
         service = _make_service(mock_genai_client)
         req = ValidationRequest(
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
-        result = service.validate(req)
+        result = await service.validate(req)
         assert result.is_valid is False
 
-    def test_summary_reflects_error_and_warning_counts(self, mock_genai_client, sample_character_sheet):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+    @pytest.mark.asyncio
+    async def test_summary_reflects_error_and_warning_counts(self, mock_genai_client, sample_character_sheet):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         service = _make_service(mock_genai_client)
@@ -367,7 +398,7 @@ class TestValidatorIsValidLogic:
             cut_plan=_make_valid_cut_plan(),
             character_sheet=sample_character_sheet,
         )
-        result = service.validate(req)
+        result = await service.validate(req)
         assert "0 error" in result.summary
         assert "0 warning" in result.summary
 
@@ -386,7 +417,7 @@ class TestValidatorRouter:
     def test_validate_returns_200_with_valid_report(
         self, test_client, mock_genai_client, sample_cut_plan, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.return_value = mock_structured_response(
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
             _valid_gemini_report_json(is_valid=True)
         )
         response = test_client.post(
@@ -406,7 +437,7 @@ class TestValidatorRouter:
     def test_validate_returns_429_on_quota_exceeded(
         self, test_client, mock_genai_client, sample_cut_plan, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = QuotaExceededError()
+        mock_genai_client.aio.models.generate_content.side_effect = QuotaExceededError()
         response = test_client.post(
             "/api/pipeline/validate",
             json=self._valid_payload(sample_cut_plan, sample_character_sheet),
@@ -416,7 +447,7 @@ class TestValidatorRouter:
     def test_validate_returns_422_on_safety_block(
         self, test_client, mock_genai_client, sample_cut_plan, sample_character_sheet
     ):
-        mock_genai_client.models.generate_content.side_effect = SafetyBlockError()
+        mock_genai_client.aio.models.generate_content.side_effect = SafetyBlockError()
         response = test_client.post(
             "/api/pipeline/validate",
             json=self._valid_payload(sample_cut_plan, sample_character_sheet),

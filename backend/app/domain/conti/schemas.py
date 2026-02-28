@@ -9,6 +9,7 @@ from app.domain.cut_planner.schemas import CutPlan
 from app.domain.validator.schemas import ValidationReport
 
 OutputMode = Literal["image", "video", "mixed"]
+StyleTemplate = Literal["webtoon_cel", "cinematic_realism", "watercolor_dream", "digital_masterpaint"]
 
 
 class ContiRequest(BaseModel):
@@ -17,6 +18,7 @@ class ContiRequest(BaseModel):
     tone: str
     output_language: str = Field(default="ko")
     output_mode: OutputMode = "image"
+    style_template: StyleTemplate = "webtoon_cel"
 
 
 class GeneratedCut(BaseModel):
@@ -48,11 +50,25 @@ class GenerateMediaRequest(BaseModel):
     cut_plan: CutPlan
     character_sheet: CharacterSheet
     output_mode: OutputMode = "image"
+    style_template: StyleTemplate = "webtoon_cel"
     reference_images: dict[str, str] = Field(default_factory=dict)
 
 
 class GenerateMediaResponse(BaseModel):
     cuts: list[GeneratedCut]
+
+
+class PromptPreviewCut(BaseModel):
+    cut_number: int
+    styled_prompt: str
+    reference_inputs: list[str]
+
+
+class PromptPreviewResult(BaseModel):
+    cut_plan: CutPlan
+    characters: CharacterSheet
+    anchor_prompt: str
+    cuts: list[PromptPreviewCut]
 
 
 class RunSummary(BaseModel):

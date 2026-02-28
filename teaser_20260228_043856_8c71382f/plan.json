@@ -1,0 +1,82 @@
+{
+  "title": "오만과 편견",
+  "output_language": "ko",
+  "style_template": "A",
+  "main_character": {
+    "name": "엘리자베스 베넷",
+    "one_line_role": "관찰력이 뛰어나고 위트 있는 베넷 가의 둘째 딸",
+    "visual_keywords": "19세기 영국 드레스, 짙은 갈색 머리, 총명하고 생기 있는 눈빛, 책을 든 모습"
+  },
+  "character_anchor_prompt": "Elizabeth Bennet, 19th century regency era dress, dark brown hair updo, lively and intelligent expression, classic beauty",
+  "panels": [
+    {
+      "index": 1,
+      "visual": "화려한 19세기 무도회장, 계산적인 눈빛을 한 사람들에게 둘러싸인 부유해 보이는 젊은 신사의 뒷모습.",
+      "speech_bubbles": [],
+      "narration": "재산이 많은 독신 남성에게 아내가 필요하다는 것은 누구나 인정하는 진리다."
+    },
+    {
+      "index": 2,
+      "visual": "흥분한 표정으로 부채를 흔들며 서재로 뛰어 들어오는 베넷 부인. 의자에 앉아 무심하게 책을 읽고 있는 베넷 씨.",
+      "speech_bubbles": [
+        "여보! 네더필드 파크에 드디어 사람이 왔대요!",
+        "북부에서 온 엄청난 부자 청년이라는군요!"
+      ],
+      "narration": null
+    },
+    {
+      "index": 3,
+      "visual": "저택 앞에 도착하는 고급스럽고 화려한 마차. 실루엣으로 보이는 완벽한 신사 빙리 씨의 모습.",
+      "speech_bubbles": [],
+      "narration": "1년에 5천 파운드를 버는 완벽한 독신남, 빙리 씨."
+    },
+    {
+      "index": 4,
+      "visual": "엄마의 호들갑에 모여든 다섯 명의 베넷 가 자매들. 그 중 둘째 엘리자베스(리지)는 흥미롭다는 듯 미소 짓고 있다.",
+      "speech_bubbles": [
+        "우리 딸들 중 하나와 사랑에 빠질지도 몰라요!"
+      ],
+      "narration": "딸만 다섯인 우리 집안엔 이보다 더 완벽한 신랑감이 없다."
+    },
+    {
+      "index": 5,
+      "visual": "남편의 팔을 붙잡고 간절하고도 신경질적으로 재촉하는 베넷 부인.",
+      "speech_bubbles": [
+        "당장 그에게 방문해서 인사를 나누세요!",
+        "난 안 가오. 당신과 딸들이나 가시오."
+      ],
+      "narration": null
+    },
+    {
+      "index": 6,
+      "visual": "능글맞은 미소를 지으며 안경을 치켜올리는 베넷 씨.",
+      "speech_bubbles": [
+        "빙리 씨는 여전히 아름다운 당신을 제일 마음에 들어 할지도 모르니."
+      ],
+      "narration": "내 신경을 긁는 데 천재적인 우리 아빠."
+    },
+    {
+      "index": 7,
+      "visual": "책을 덮으며 어깨를 으쓱하는 엘리자베스. 냉소적이면서도 장난기 어린 표정이다.",
+      "speech_bubbles": [
+        "아빠도 참, 엄마를 저렇게 놀리시다니."
+      ],
+      "narration": "그리고 매일같이 펼쳐지는 유난스러운 결혼 대소동."
+    },
+    {
+      "index": 8,
+      "visual": "방을 나가며 아무렇지도 않게 폭탄 선언을 하는 베넷 씨. 그 말에 경악과 환희가 교차하는 베넷 부인과 딸들의 얼굴.",
+      "speech_bubbles": [
+        "아, 빙리 씨는 오늘 아침에 이미 만나고 왔소만.",
+        "네?!"
+      ],
+      "narration": null
+    },
+    {
+      "index": 9,
+      "visual": "드레스와 모자를 고르며 들뜬 자매들 너머로, 창밖의 네더필드 저택을 바라보는 엘리자베스의 시선.",
+      "speech_bubbles": [],
+      "narration": "다가오는 무도회, 과연 이 완벽한 신랑감은 누구의 차지가 될까?"
+    }
+  ]
+}

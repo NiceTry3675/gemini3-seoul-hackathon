@@ -43,7 +43,7 @@ curl -X POST http://127.0.0.1:8000/api/prompt-preview \
   -d '{
     "source_text": "여기에 소설 초반 텍스트를 넣으세요",
     "output_language": "ko",
-    "style_template": "A"
+    "style_template": "webtoon_cel"
   }'
 ```
 
@@ -55,7 +55,7 @@ curl -X POST http://127.0.0.1:8000/api/teaser \
   -d '{
     "source_text": "여기에 소설 초반 텍스트를 넣으세요",
     "output_language": "ko",
-    "style_template": "A",
+    "style_template": "webtoon_cel",
     "max_image_cuts": 9
   }'
 ```
@@ -64,6 +64,7 @@ Notes:
 
 - `/api/teaser` is sequential (`anchor + cuts`) so full 9 cuts can take time.
 - For smoke tests, use a smaller `max_image_cuts` (for example 1~3).
+- Prompt templates and system instructions are managed in `backend/system_instruction.toml`.
 - Generated images are saved under `outputs/teaser_<timestamp>_<id>/`
   with files: `plan.json`, `anchor_prompt.txt`, `anchor.png`, and `cut_01.png...`.
 - If you see SSL timeout errors (for example `_ssl.c:983: The handshake operation timed out`),

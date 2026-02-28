@@ -193,10 +193,10 @@ SMOKE_UI_HTML = """<!doctype html>
           <div>
             <label for="style">Style template</label>
             <select id="style">
-              <option value="A" selected>A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
+              <option value="webtoon_cel" selected>webtoon_cel</option>
+              <option value="cinematic_realism">cinematic_realism</option>
+              <option value="watercolor_dream">watercolor_dream</option>
+              <option value="digital_masterpaint">digital_masterpaint</option>
             </select>
           </div>
           <div>

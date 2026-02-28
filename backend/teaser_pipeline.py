@@ -26,10 +26,11 @@ from .teaser_models import (
     TeaserResult,
 )
 from .teaser_prompts import (
-    STORYBOARD_SYSTEM,
     build_anchor_image_prompt,
     build_panel_image_prompt,
     build_storyboard_user_prompt,
+    get_storyboard_retry_suffix,
+    get_storyboard_system_prompt,
 )
 
 
@@ -116,9 +117,9 @@ def generate_plan(client: genai.Client, req: TeaserRequest, *, max_attempts: int
 
     last_err: Exception | None = None
     for attempt in range(1, max_attempts + 1):
-        system_prompt = STORYBOARD_SYSTEM
+        system_prompt = get_storyboard_system_prompt()
         if attempt > 1:
-            system_prompt = system_prompt + "\n\nOutput ONLY valid JSON."
+            system_prompt = system_prompt + "\n\n" + get_storyboard_retry_suffix()
 
         resp = _generate_content_with_retries(
             client,

@@ -5,7 +5,12 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 OutputLanguage = Literal["ko", "en", "ja"]
-StyleTemplate = Literal["A", "B", "C", "D"]
+StyleTemplate = Literal[
+    "webtoon_cel",
+    "cinematic_realism",
+    "watercolor_dream",
+    "digital_masterpaint",
+]
 
 
 class MainCharacter(BaseModel):
@@ -48,7 +53,7 @@ class TeaserPlan(BaseModel):
 class TeaserRequest(BaseModel):
     source_text: str = Field(min_length=1)
     output_language: OutputLanguage = "ko"
-    style_template: StyleTemplate = "A"
+    style_template: StyleTemplate = "webtoon_cel"
     max_image_cuts: int = Field(default=9, ge=1, le=9)
 
     # Allow overrides for experiments without editing code.

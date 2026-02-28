@@ -3,6 +3,9 @@ webtoon_cel = "2D cel shading, crisp line art, korean webtoon style, flat colors
 cinematic_realism = "Semi-realistic, intricate details, cinematic lighting, dramatic shadows, 8k resolution, photorealistic textures, depth of field."
 watercolor_dream = "Watercolor painting, soft pastel colors, traditional media, fluid brush strokes, dreamy and ethereal atmosphere, paper texture."
 digital_masterpaint = "High-quality digital painting, conceptual art, thick impasto strokes, rich and vibrant colors, masterpiece, highly detailed."
+manga_bw = "Japanese manga, black and white ink drawing, detailed pen lines, screentone shading, dynamic speed lines, expressive hatching, high contrast monochrome, paper texture."
+noir_graphic = "Noir graphic novel, stark black and white with selective red accent color, heavy shadows, dramatic chiaroscuro lighting, gritty ink wash, cinematic framing."
+ghibli_pastoral = "Studio Ghibli inspired, soft watercolor backgrounds, warm natural lighting, lush greenery, gentle pastel palette, hand-painted feel, whimsical and nostalgic atmosphere."
 
 [prompts]
 negative_hint = "no watermark, no logo, no signature, no extra text"
@@ -47,7 +50,7 @@ Return JSON matching this schema:
 {
   "title": string,
   "output_language": "ko"|"en"|"ja",
-  "style_template": "webtoon_cel"|"cinematic_realism"|"watercolor_dream"|"digital_masterpaint",
+  "style_template": "webtoon_cel"|"cinematic_realism"|"watercolor_dream"|"digital_masterpaint"|"manga_bw"|"noir_graphic"|"ghibli_pastoral",
   "main_character": { "name": string, "one_line_role": string, "visual_keywords": string },
   "character_anchor_prompt": string,
   "panels": [
@@ -67,7 +70,7 @@ Constraints:
 
 storyboard_user = """
 output_language: {output_language}  (ko|en|ja)
-style_template: {style_template}    (webtoon_cel|cinematic_realism|watercolor_dream|digital_masterpaint)
+style_template: {style_template}    (webtoon_cel|cinematic_realism|watercolor_dream|digital_masterpaint|manga_bw|noir_graphic|ghibli_pastoral)
 aspect_ratio: 1:1
 
 Below is the raw material (novel excerpt). Extract the most dramatic, visually striking moments to craft a compelling teaser. Do NOT attempt to cover everything — select, compress, and rearrange for maximum hook.

@@ -10,6 +10,9 @@ StyleTemplate = Literal[
     "cinematic_realism",
     "watercolor_dream",
     "digital_masterpaint",
+    "manga_bw",
+    "noir_graphic",
+    "ghibli_pastoral",
 ]
 
 

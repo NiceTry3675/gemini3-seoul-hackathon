@@ -23,7 +23,7 @@ export default function MetaPrompt2Screen({
     <div className="min-h-screen">
       <TopNav links={PRIMARY_NAV_LINKS} />
 
-      <main className="mx-auto flex w-full max-w-[1100px] flex-col px-6 py-10 lg:px-12">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-36 pt-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 3 OF 4"
           nextLabel="Next: Generate Teasers"
@@ -31,7 +31,7 @@ export default function MetaPrompt2Screen({
           currentIndex={3}
         />
 
-        <section className="mt-10 space-y-8">
+        <section className="mx-auto mt-10 w-full max-w-[980px] space-y-8">
           <div className="space-y-2">
             <h2 className="text-5xl font-black tracking-tight text-slate-50">Choose Visual Style</h2>
             <p className="max-w-4xl text-lg text-slate-400">

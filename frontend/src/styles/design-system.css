@@ -1,0 +1,47 @@
+:root {
+  --ts-font-sans: 'Inter', sans-serif;
+
+  --ts-color-primary: #2b6cee;
+  --ts-color-primary-hover: #1f5de6;
+  --ts-color-primary-soft: #2b6cee1a;
+  --ts-color-primary-soft-hover: #2b6cee33;
+
+  --ts-color-canvas: #101622;
+  --ts-color-nav: #0a1225;
+  --ts-color-panel: #151c2f;
+  --ts-color-surface: #1a2337;
+
+  --ts-color-border: #2b3446;
+  --ts-color-border-strong: #4a5875;
+
+  --ts-color-text: #e6ebf5;
+  --ts-color-text-muted: #9da6b9;
+  --ts-color-text-subtle: #6f7b92;
+
+  --ts-color-success: #10b981;
+  --ts-color-danger: #ef4444;
+}
+
+@theme inline {
+  --font-sans: var(--ts-font-sans);
+
+  --color-ts-primary: var(--ts-color-primary);
+  --color-ts-primary-hover: var(--ts-color-primary-hover);
+  --color-ts-primary-soft: var(--ts-color-primary-soft);
+  --color-ts-primary-soft-hover: var(--ts-color-primary-soft-hover);
+
+  --color-ts-canvas: var(--ts-color-canvas);
+  --color-ts-nav: var(--ts-color-nav);
+  --color-ts-panel: var(--ts-color-panel);
+  --color-ts-surface: var(--ts-color-surface);
+
+  --color-ts-border: var(--ts-color-border);
+  --color-ts-border-strong: var(--ts-color-border-strong);
+
+  --color-ts-text: var(--ts-color-text);
+  --color-ts-text-muted: var(--ts-color-text-muted);
+  --color-ts-text-subtle: var(--ts-color-text-subtle);
+
+  --color-ts-success: var(--ts-color-success);
+  --color-ts-danger: var(--ts-color-danger);
+}

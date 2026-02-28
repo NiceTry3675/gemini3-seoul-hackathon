@@ -2,7 +2,7 @@ interface LogoMarkProps {
   className?: string;
 }
 
-export default function LogoMark({ className = 'size-8 text-[#2b6cee]' }: LogoMarkProps) {
+export default function LogoMark({ className = 'size-8 text-ts-primary' }: LogoMarkProps) {
   return (
     <div className={className} aria-hidden="true">
       <svg fill="currentColor" viewBox="0 0 24 24" className="size-full" xmlns="http://www.w3.org/2000/svg">

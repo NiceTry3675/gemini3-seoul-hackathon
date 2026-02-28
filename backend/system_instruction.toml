@@ -42,9 +42,15 @@ Dialogue Balance:
 - At least 2 panels MUST have empty speech_bubbles ([]) — use pure visual storytelling for impact.
 - When speech_bubbles are used, keep them under 20 characters each (in the target language) for readability.
 
+Narration Usage:
+- Narration is a separate storytelling channel from speech bubbles — use it generously to build atmosphere, inner thoughts, or dramatic tension.
+- Panels with empty speech_bubbles should typically have narration to maintain narrative momentum.
+- Aim for at least 5 out of 9 panels to have narration (short, evocative lines — not dry exposition).
+- Narration tone: literary, punchy, and emotionally charged. Think cinematic voiceover, not plot summary.
+
 Emotional Arc:
 - Design a clear emotional progression: intrigue → tension → surprise/shock → unresolved hook.
-- Vary the emotional tone across panels (humor, dread, wonder, intimacy, conflict).
+- Vary the emotional tone across panels (dread, wonder, conflict).
 
 Return JSON matching this schema:
 {

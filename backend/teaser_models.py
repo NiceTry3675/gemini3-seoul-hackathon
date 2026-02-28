@@ -5,7 +5,12 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 OutputLanguage = Literal["ko", "en", "ja"]
-StyleTemplate = Literal["A", "B", "C", "D"]
+StyleTemplate = Literal[
+    "webtoon_cel",
+    "cinematic_realism",
+    "watercolor_dream",
+    "digital_masterpaint",
+]
 
 
 class MainCharacter(BaseModel):
@@ -48,7 +53,8 @@ class TeaserPlan(BaseModel):
 class TeaserRequest(BaseModel):
     source_text: str = Field(min_length=1)
     output_language: OutputLanguage = "ko"
-    style_template: StyleTemplate = "A"
+    style_template: StyleTemplate = "webtoon_cel"
+    max_image_cuts: int = Field(default=9, ge=1, le=9)
 
     # Allow overrides for experiments without editing code.
     text_model: str = "gemini-3.1-pro-preview"
@@ -65,3 +71,14 @@ class TeaserResult(BaseModel):
     character_anchor_image_base64: str = Field(min_length=1)
     cuts: list[TeaserCut]
 
+
+class PromptPreviewCut(BaseModel):
+    index: int = Field(ge=1, le=9)
+    prompt: str = Field(min_length=1)
+    reference_inputs: list[str] = Field(default_factory=list)
+
+
+class PromptPreviewResult(BaseModel):
+    plan: TeaserPlan
+    anchor_prompt: str = Field(min_length=1)
+    cuts: list[PromptPreviewCut]

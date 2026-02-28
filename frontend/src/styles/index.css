@@ -1,14 +1,5 @@
 @import 'tailwindcss';
-
-:root {
-  --ts-primary: #2b6cee;
-  --ts-bg-dark: #101622;
-  --ts-bg-soft: #151b26;
-  --ts-surface: #1a202c;
-  --ts-border: #2b3446;
-  --ts-muted: #9da6b9;
-  --ts-text: #e6ebf5;
-}
+@import './design-system.css';
 
 * {
   box-sizing: border-box;
@@ -22,11 +13,11 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
-  color: var(--ts-text);
+  font-family: var(--ts-font-sans);
+  color: var(--ts-color-text);
   background: radial-gradient(circle at 20% 15%, rgba(43, 108, 238, 0.14), transparent 35%),
     radial-gradient(circle at 80% 75%, rgba(43, 108, 238, 0.12), transparent 40%),
-    linear-gradient(130deg, #060d1d 0%, #0b1327 42%, #101622 100%);
+    linear-gradient(130deg, #060d1d 0%, #0b1327 42%, var(--ts-color-canvas) 100%);
 }
 
 .material-symbols-outlined {

@@ -7,16 +7,7 @@ import StoryInputScreen from './components/screens/StoryInputScreen';
 import VideoExportScreen from './components/screens/VideoExportScreen';
 import { generateFrameOptions, buildInitialMetaPrompt, startMockRender } from './services/workflowService';
 import { createInitialWorkflowState, workflowReducer } from './state/workflowReducer';
-import type { FrameOption, WorkflowStep } from './types/workflow';
-
-function rotateOptions(options: FrameOption[], shift: number): FrameOption[] {
-  if (options.length === 0) {
-    return options;
-  }
-
-  const normalizedShift = shift % options.length;
-  return options.map((_, index) => options[(index + normalizedShift) % options.length]);
-}
+import type { WorkflowStep } from './types/workflow';
 
 function downloadWorkflowSnapshot(snapshot: unknown): void {
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
@@ -94,42 +85,15 @@ export default function App() {
     dispatch({ type: 'NEXT' });
   };
 
-  const handleMetaRegenerate = () => {
-    if (state.metaPrompt.draft.trim()) {
-      dispatch({ type: 'PUSH_META_HISTORY', payload: state.metaPrompt.draft });
-    }
-
-    dispatch({
-      type: 'SET_META_DRAFT',
-      payload: buildInitialMetaPrompt(state.storyInput.text),
-    });
-  };
-
   const handleStyleSelection = (style: NonNullable<typeof state.selectedStyle>) => {
-    const frameOptions = [1, 2, 3, 4].map((frameIndex) => generateFrameOptions(frameIndex, style));
+    const frameOptions = state.frameSelections.map((frame) =>
+      generateFrameOptions(frame.frameIndex, style),
+    );
     dispatch({
       type: 'APPLY_STYLE',
       payload: {
         style,
         frameOptions,
-      },
-    });
-  };
-
-  const handleRegenerateFrame = (frameIndex: number) => {
-    if (!state.selectedStyle) {
-      return;
-    }
-
-    const baselineOptions = generateFrameOptions(frameIndex, state.selectedStyle);
-    const generation =
-      state.frameSelections.find((frame) => frame.frameIndex === frameIndex)?.generation ?? 0;
-
-    dispatch({
-      type: 'REGENERATE_FRAME_OPTIONS',
-      payload: {
-        frameIndex,
-        options: rotateOptions(baselineOptions, generation + 1),
       },
     });
   };
@@ -168,9 +132,7 @@ export default function App() {
         return (
           <MetaPrompt1Screen
             draft={state.metaPrompt.draft}
-            historyCount={state.metaPrompt.history.length}
             onDraftChange={(value) => dispatch({ type: 'SET_META_DRAFT', payload: value })}
-            onRegenerate={handleMetaRegenerate}
             onBack={goBack}
             onNext={goNext}
           />
@@ -193,7 +155,6 @@ export default function App() {
             onSelectOption={(frameIndex, optionId) =>
               dispatch({ type: 'SELECT_FRAME_OPTION', payload: { frameIndex, optionId } })
             }
-            onRegenerateCurrentFrame={handleRegenerateFrame}
             onStartOver={() => dispatch({ type: 'RESET' })}
             onGenerateTeaser={startProcessing}
             onBack={goBack}

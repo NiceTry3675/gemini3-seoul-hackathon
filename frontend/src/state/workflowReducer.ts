@@ -43,8 +43,8 @@ function hasStyleSelection(state: AppWorkflowState): boolean {
   return state.selectedStyle !== null;
 }
 
-function hasRequiredFrameSelection(state: AppWorkflowState): boolean {
-  return state.frameSelections[0]?.selectedOptionId !== null;
+function hasAllFrameSelections(state: AppWorkflowState): boolean {
+  return state.frameSelections.length > 0 && state.frameSelections.every((frame) => frame.selectedOptionId !== null);
 }
 
 export function canAdvanceFromStep(state: AppWorkflowState): boolean {
@@ -56,7 +56,7 @@ export function canAdvanceFromStep(state: AppWorkflowState): boolean {
     case 'meta_prompt_2':
       return hasStyleSelection(state);
     case 'meta_prompt_3':
-      return hasRequiredFrameSelection(state);
+      return hasAllFrameSelections(state);
     default:
       return false;
   }
@@ -234,7 +234,7 @@ export function workflowReducer(
       };
 
     case 'START_PROCESSING':
-      if (!hasRequiredFrameSelection(state) || state.selectedStyle === null) {
+      if (!hasAllFrameSelections(state) || state.selectedStyle === null) {
         return state;
       }
       return {

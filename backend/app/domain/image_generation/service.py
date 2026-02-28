@@ -8,7 +8,7 @@ from google.genai import types
 from app.config import settings
 from app.exceptions import GeminiAPIError, QuotaExceededError, SafetyBlockError
 from app.prompt_manager import get_prompt_manager
-from app.shared.multimodal import part_to_base64
+from app.shared.multimodal import base64_to_part, part_to_base64
 from app.domain.image_generation.schemas import (
     ImageGenerationRequest,
     ImageGenerationResponse,
@@ -34,7 +34,7 @@ class GeminiImageService:
             raise SafetyBlockError() from exc
         raise GeminiAPIError(str(exc)) from exc
 
-    def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
+    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
         try:
             config_params = {
                 "response_modalities": ["IMAGE"],
@@ -43,9 +43,19 @@ class GeminiImageService:
             if si:
                 config_params["system_instruction"] = si
 
-            response = self._client.models.generate_content(
+            # Build contents: text prompt + optional reference images
+            if request.reference_images:
+                parts: list[types.Part] = [types.Part.from_text(text=request.prompt)]
+                for name, img_b64 in request.reference_images.items():
+                    parts.append(types.Part.from_text(text=f"[Reference: {name}]"))
+                    parts.append(base64_to_part(img_b64, "image/png"))
+                contents = parts
+            else:
+                contents = request.prompt
+
+            response = await self._client.aio.models.generate_content(
                 model=self._model,
-                contents=request.prompt,
+                contents=contents,
                 config=types.GenerateContentConfig(**config_params),
             )
 

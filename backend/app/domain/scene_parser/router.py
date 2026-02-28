@@ -19,4 +19,4 @@ async def scene_parse(
     request: NovelInput,
     service: SceneParserService = Depends(_get_service),
 ) -> SceneBreakdown:
-    return service.parse(request)
+    return await service.parse(request)

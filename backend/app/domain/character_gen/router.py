@@ -19,4 +19,4 @@ async def character_gen(
     request: CharacterGenRequest,
     service: CharacterGenService = Depends(_get_service),
 ) -> CharacterGenResponse:
-    return service.generate(request)
+    return await service.generate(request)

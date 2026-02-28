@@ -56,9 +56,9 @@ class GeminiTextService:
             raise SafetyBlockError() from exc
         raise GeminiAPIError(str(exc)) from exc
 
-    def generate(self, request: TextGenerationRequest) -> TextGenerationResponse:
+    async def generate(self, request: TextGenerationRequest) -> TextGenerationResponse:
         try:
-            response = self._client.models.generate_content(
+            response = await self._client.aio.models.generate_content(
                 model=self._model,
                 contents=self._build_contents(request),
                 config=self._build_config(request),
@@ -76,7 +76,7 @@ class GeminiTextService:
         except Exception as exc:
             self._handle_error(exc)
 
-    def generate_structured(self, request: StructuredGenerationRequest) -> dict:
+    async def generate_structured(self, request: StructuredGenerationRequest) -> dict:
         import json
         try:
             config = self._build_config(
@@ -84,7 +84,7 @@ class GeminiTextService:
                 response_mime_type="application/json",
                 response_schema=request.response_schema,
             )
-            response = self._client.models.generate_content(
+            response = await self._client.aio.models.generate_content(
                 model=self._model,
                 contents=self._build_contents(request),
                 config=config,
@@ -106,12 +106,11 @@ class GeminiTextService:
 
     async def generate_stream(self, request: TextGenerationRequest) -> AsyncGenerator[str, None]:
         try:
-            response_stream = self._client.models.generate_content_stream(
+            async for chunk in self._client.aio.models.generate_content_stream(
                 model=self._model,
                 contents=self._build_contents(request),
                 config=self._build_config(request),
-            )
-            for chunk in response_stream:
+            ):
                 if chunk.text:
                     yield chunk.text
         except (QuotaExceededError, SafetyBlockError):

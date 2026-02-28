@@ -15,8 +15,8 @@ def _get_service(client: genai.Client = Depends(get_genai_client)) -> CutPlanner
 
 
 @router.post("/cut-plan", response_model=CutPlan)
-def create_cut_plan(
+async def create_cut_plan(
     request: CutPlanRequest,
     service: CutPlannerService = Depends(_get_service),
 ) -> CutPlan:
-    return service.plan(request)
+    return await service.plan(request)

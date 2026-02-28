@@ -26,7 +26,7 @@ class SceneParserService:
             raise SafetyBlockError() from exc
         raise GeminiAPIError(str(exc)) from exc
 
-    def parse(self, novel_input: NovelInput) -> SceneBreakdown:
+    async def parse(self, novel_input: NovelInput) -> SceneBreakdown:
         try:
             system_instruction = self._pm.get_system_instruction("scene_parser.instruction")
 
@@ -43,7 +43,7 @@ class SceneParserService:
                 response_schema=SceneBreakdown,
             )
 
-            response = self._client.models.generate_content(
+            response = await self._client.aio.models.generate_content(
                 model=self._model,
                 contents=user_prompt,
                 config=config,

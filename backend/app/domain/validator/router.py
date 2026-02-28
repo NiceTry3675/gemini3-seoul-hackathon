@@ -15,8 +15,8 @@ def _get_service(client: genai.Client = Depends(get_genai_client)) -> ValidatorS
 
 
 @router.post("/validate", response_model=ValidationReport)
-def validate_cut_plan(
+async def validate_cut_plan(
     request: ValidationRequest,
     service: ValidatorService = Depends(_get_service),
 ) -> ValidationReport:
-    return service.validate(request)
+    return await service.validate(request)

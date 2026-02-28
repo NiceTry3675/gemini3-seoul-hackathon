@@ -16,8 +16,8 @@ def _get_service(client: genai.Client = Depends(get_genai_client)) -> GeminiImag
 
 
 @router.post("/generate", response_model=ImageGenerationResponse)
-def generate_image(
+async def generate_image(
     request: ImageGenerationRequest,
     service: GeminiImageService = Depends(_get_service),
 ):
-    return service.generate(request)
+    return await service.generate(request)

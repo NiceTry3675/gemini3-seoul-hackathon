@@ -82,7 +82,7 @@ class ValidatorService:
 
         return issues
 
-    def validate(self, request: ValidationRequest) -> ValidationReport:
+    async def validate(self, request: ValidationRequest) -> ValidationReport:
         # Run structural checks first
         structural_issues = self._run_structural_checks(request)
 
@@ -114,7 +114,7 @@ class ValidatorService:
                 response_schema=ValidationReport,
             )
 
-            response = self._client.models.generate_content(
+            response = await self._client.aio.models.generate_content(
                 model=self._model,
                 contents=user_prompt,
                 config=config,

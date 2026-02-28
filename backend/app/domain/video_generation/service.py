@@ -81,18 +81,14 @@ class GeminiVideoService:
                 raw_video = base64.b64decode(request.extend_video_base64)
                 gen_kwargs["video"] = types.Video(video_bytes=raw_video)
 
-            operation = await asyncio.to_thread(
-                self._client.models.generate_videos, **gen_kwargs,
-            )
+            operation = await self._client.aio.models.generate_videos(**gen_kwargs)
 
             start = time.monotonic()
             while not operation.done:
                 if time.monotonic() - start > _MAX_POLL_SECONDS:
                     raise GeminiAPIError("Video generation timed out")
                 await asyncio.sleep(5)
-                operation = await asyncio.to_thread(
-                    self._client.operations.get, operation,
-                )
+                operation = await self._client.aio.operations.get(operation)
 
             if not operation.response or not operation.response.generated_videos:
                 raise GeminiAPIError("Video generation returned no results")

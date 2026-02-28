@@ -35,7 +35,7 @@ class CharacterGenService:
             raise SafetyBlockError() from exc
         raise GeminiAPIError(str(exc)) from exc
 
-    def _generate_character_sheet(self, request: CharacterGenRequest) -> CharacterSheet:
+    async def _generate_character_sheet(self, request: CharacterGenRequest) -> CharacterSheet:
         system_instruction = self._pm.get_system_instruction("character_gen.instruction")
 
         scenes_summary = "\n".join(
@@ -55,7 +55,7 @@ class CharacterGenService:
             response_schema=CharacterSheet,
         )
 
-        response = self._client.models.generate_content(
+        response = await self._client.aio.models.generate_content(
             model=self._text_model,
             contents=user_prompt,
             config=config,
@@ -71,12 +71,12 @@ class CharacterGenService:
         data = json.loads(text)
         return CharacterSheet.model_validate(data)
 
-    def _generate_reference_image(self, character_name: str, visual_prompt: str) -> str | None:
+    async def _generate_reference_image(self, character_name: str, visual_prompt: str) -> str | None:
         try:
             config = types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
             )
-            response = self._client.models.generate_content(
+            response = await self._client.aio.models.generate_content(
                 model=self._image_model,
                 contents=visual_prompt,
                 config=config,
@@ -94,9 +94,9 @@ class CharacterGenService:
             logger.warning("Reference image generation failed for %s: %s", character_name, exc)
             return None
 
-    def generate(self, request: CharacterGenRequest) -> CharacterGenResponse:
+    async def generate(self, request: CharacterGenRequest) -> CharacterGenResponse:
         try:
-            character_sheet = self._generate_character_sheet(request)
+            character_sheet = await self._generate_character_sheet(request)
         except (QuotaExceededError, SafetyBlockError):
             raise
         except json.JSONDecodeError as exc:
@@ -106,7 +106,7 @@ class CharacterGenService:
 
         reference_images: dict[str, str] = {}
         for character in character_sheet.characters:
-            image_b64 = self._generate_reference_image(character.name, character.visual_prompt)
+            image_b64 = await self._generate_reference_image(character.name, character.visual_prompt)
             if image_b64 is not None:
                 reference_images[character.name] = image_b64
 

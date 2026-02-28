@@ -26,7 +26,7 @@ class CutPlannerService:
             raise SafetyBlockError() from exc
         raise GeminiAPIError(str(exc)) from exc
 
-    def plan(self, request: CutPlanRequest) -> CutPlan:
+    async def plan(self, request: CutPlanRequest) -> CutPlan:
         try:
             system_instruction = self._pm.get_system_instruction("cut_planner.instruction")
 
@@ -55,7 +55,7 @@ class CutPlannerService:
                 response_schema=CutPlan,
             )
 
-            response = self._client.models.generate_content(
+            response = await self._client.aio.models.generate_content(
                 model=self._model,
                 contents=user_prompt,
                 config=config,

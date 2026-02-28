@@ -18,11 +18,11 @@ function DefaultRightContent() {
       <button
         type="button"
         aria-label="Notifications"
-        className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-800/70 hover:text-slate-100"
+        className="rounded-full p-2 text-ts-text-muted transition-colors hover:bg-ts-surface hover:text-ts-text"
       >
         <span className="material-symbols-outlined text-xl">notifications</span>
       </button>
-      <div className="size-9 rounded-full border border-slate-600 bg-slate-700" aria-hidden="true" />
+      <div className="size-9 rounded-full border border-ts-border bg-ts-surface" aria-hidden="true" />
     </div>
   );
 }
@@ -33,11 +33,11 @@ export default function TopNav({
   innerClassName = 'max-w-[1200px] px-6 lg:px-10',
 }: TopNavProps) {
   return (
-    <header className="w-full border-b border-slate-800/80 bg-[#0a1225]/90 backdrop-blur-md">
+    <header className="w-full border-b border-ts-border/80 bg-ts-nav/90 backdrop-blur-md">
       <div className={`mx-auto flex w-full items-center justify-between py-4 ${innerClassName}`}>
         <div className="flex items-center gap-3">
           <LogoMark />
-          <h1 className="text-xl font-bold tracking-tight text-slate-100">TeaserStudio</h1>
+          <h1 className="text-xl font-bold tracking-tight text-ts-text">TeaserStudio</h1>
         </div>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -46,7 +46,7 @@ export default function TopNav({
               key={link.label}
               type="button"
               className={`text-sm font-medium transition-colors ${
-                link.active ? 'text-[#2b6cee]' : 'text-slate-300 hover:text-[#2b6cee]'
+                link.active ? 'text-ts-primary' : 'text-ts-text-muted hover:text-ts-primary'
               }`}
             >
               {link.label}

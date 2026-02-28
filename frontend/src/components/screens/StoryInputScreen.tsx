@@ -1,5 +1,6 @@
 import StepProgress from '../layout/StepProgress';
 import TopNav from '../layout/TopNav';
+import Button from '../ui/Button';
 import { STORY_NAV_LINKS, STORY_PLACEHOLDER } from '../../data/workflowData';
 import type { StoryInputMode } from '../../types/workflow';
 
@@ -26,18 +27,12 @@ export default function StoryInputScreen({
         links={STORY_NAV_LINKS}
         rightContent={
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="rounded-lg border border-slate-700 bg-[#0a1225] px-5 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500"
-            >
+            <Button variant="outline" size="sm">
               Log In
-            </button>
-            <button
-              type="button"
-              className="rounded-lg bg-[#2b6cee] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600"
-            >
+            </Button>
+            <Button variant="primary" size="sm">
               Sign Up
-            </button>
+            </Button>
           </div>
         }
         innerClassName="max-w-[1200px] px-6 lg:px-8"
@@ -59,20 +54,20 @@ export default function StoryInputScreen({
             </p>
           </div>
 
-          <section className="overflow-hidden rounded-2xl border border-slate-800 bg-[#151c2f]/70">
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-3">
+          <section className="overflow-hidden rounded-2xl border border-ts-border bg-ts-panel/70">
+            <div className="flex items-center justify-between border-b border-ts-border px-6 py-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
                 <span className="material-symbols-outlined text-base">description</span>
                 <span>Input Mode</span>
               </div>
 
-              <div className="rounded-lg border border-slate-700 bg-[#0f1628] p-1 text-sm">
+              <div className="rounded-lg border border-ts-border bg-ts-nav p-1 text-sm">
                 <button
                   type="button"
                   onClick={() => onInputModeChange('summary')}
                   className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'summary'
-                    ? 'bg-[#2b6cee] text-white'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-ts-primary text-white'
+                    : 'text-ts-text-muted hover:text-ts-text'
                     }`}
                 >
                   Summary
@@ -81,8 +76,8 @@ export default function StoryInputScreen({
                   type="button"
                   onClick={() => onInputModeChange('original')}
                   className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'original'
-                    ? 'bg-[#2b6cee] text-white'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-ts-primary text-white'
+                    : 'text-ts-text-muted hover:text-ts-text'
                     }`}
                 >
                   Original
@@ -104,20 +99,17 @@ export default function StoryInputScreen({
           </section>
 
           <div className="mt-10 flex items-center justify-end gap-6">
-            <button
-              type="button"
-              className="text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
-            >
+            <Button variant="ghost" size="sm">
               Save Draft
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={onNext}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#2b6cee] px-8 py-3 text-lg font-semibold text-white shadow-lg shadow-blue-500/30 transition-colors hover:bg-blue-600"
+              variant="primary"
+              size="md"
+              endIcon={<span className="material-symbols-outlined text-base">arrow_forward</span>}
             >
               Next: Meta Prompt
-              <span className="material-symbols-outlined text-base">arrow_forward</span>
-            </button>
+            </Button>
           </div>
         </div>
       </main>

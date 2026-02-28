@@ -68,14 +68,10 @@ export default function App() {
     return (
       <StoryInputScreen
         manuscript={state.storyInput.manuscript}
-        genre={state.storyInput.genre}
-        tone={state.storyInput.tone}
         outputLanguage={state.storyInput.outputLanguage}
         styleTemplate={state.storyInput.styleTemplate}
         canSubmit={canStartPipeline(state)}
         onManuscriptChange={(value) => dispatch({ type: 'SET_MANUSCRIPT', payload: value })}
-        onGenreChange={(value) => dispatch({ type: 'SET_GENRE', payload: value })}
-        onToneChange={(value) => dispatch({ type: 'SET_TONE', payload: value })}
         onOutputLanguageChange={(value) => dispatch({ type: 'SET_OUTPUT_LANGUAGE', payload: value })}
         onStyleTemplateChange={(value) => dispatch({ type: 'SET_STYLE_TEMPLATE', payload: value })}
         onSubmit={() => {

@@ -45,12 +45,26 @@ interface SseHandlers {
   onProgress: (event: PipelineProgressEvent) => void;
 }
 
+function parseJsonPayload(payload: string): unknown {
+  try {
+    return JSON.parse(payload);
+  } catch {
+    const start = payload.indexOf('{');
+    const end = payload.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      return JSON.parse(payload.slice(start, end + 1));
+    }
+    throw new Error('Received malformed SSE event payload.');
+  }
+}
+
 function parseSseFrame(frame: string): { event: string; data: string } | null {
   const lines = frame.split('\n');
   let event = 'message';
   const dataLines: string[] = [];
 
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
     if (!line || line.startsWith(':')) {
       continue;
     }
@@ -78,6 +92,8 @@ export async function startPipelineGeneration(
   handlers: SseHandlers,
   signal: AbortSignal,
 ): Promise<PipelineResultModel> {
+  const genre = storyInput.genre.trim();
+  const tone = storyInput.tone.trim();
   const response = await fetch(`${getApiBaseUrl()}/api/pipeline/generate`, {
     method: 'POST',
     headers: {
@@ -85,8 +101,8 @@ export async function startPipelineGeneration(
     },
     body: JSON.stringify({
       manuscript: storyInput.manuscript,
-      genre: storyInput.genre,
-      tone: storyInput.tone,
+      ...(genre ? { genre } : {}),
+      ...(tone ? { tone } : {}),
       output_language: storyInput.outputLanguage,
       output_mode: 'image',
       style_template: storyInput.styleTemplate,
@@ -113,12 +129,15 @@ export async function startPipelineGeneration(
       return;
     }
 
-    let jsonData: unknown;
-    try {
-      jsonData = JSON.parse(parsed.data);
-    } catch {
-      throw new Error('Received malformed SSE event payload.');
+    if (
+      parsed.event !== 'run_created'
+      && parsed.event !== 'progress'
+      && parsed.event !== 'result'
+    ) {
+      return;
     }
+
+    const jsonData = parseJsonPayload(parsed.data);
 
     if (parsed.event === 'run_created') {
       const runId = (jsonData as { run_id?: unknown }).run_id;
@@ -150,8 +169,15 @@ export async function startPipelineGeneration(
     }
 
     buffer += decoder.decode(value, { stream: true });
-    const frames = buffer.split('\n\n');
-    buffer = frames.pop() ?? '';
+    buffer = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    const frames: string[] = [];
+    let sepIndex = buffer.indexOf('\n\n');
+    while (sepIndex !== -1) {
+      frames.push(buffer.slice(0, sepIndex));
+      buffer = buffer.slice(sepIndex + 2);
+      sepIndex = buffer.indexOf('\n\n');
+    }
 
     for (const frame of frames) {
       processFrame(frame);
@@ -159,6 +185,7 @@ export async function startPipelineGeneration(
   }
 
   if (buffer.trim().length > 0) {
+    buffer = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     processFrame(buffer);
   }
 

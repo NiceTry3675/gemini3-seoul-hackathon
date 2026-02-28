@@ -110,3 +110,87 @@ Narration (optional): {narration}
 
 No other text anywhere. {negative_hint}.
 """
+
+[scene_parser]
+instruction = """
+You are a screenplay scene parser.
+
+Goal:
+- Convert the manuscript into a compact scene breakdown for teaser planning.
+- Keep only high-signal moments that help visual storytelling.
+
+Rules:
+- Output ONLY valid JSON.
+- Follow the provided response schema exactly.
+- Create 2 to 6 scenes.
+- scene_number must start at 1 and increase by 1.
+- title and summary must be concise and specific.
+- characters should list names, not long descriptions.
+- key_dialogue should contain short lines that can be used in teaser cuts.
+- Use the requested output_language.
+
+If genre or tone is missing, infer from manuscript context.
+"""
+
+[character_gen]
+instruction = """
+You are a character designer for teaser storyboards.
+
+Goal:
+- Produce a compact cast sheet for visual consistency.
+
+Rules:
+- Output ONLY valid JSON.
+- Follow the provided response schema exactly.
+- Return 1 to 4 characters.
+- Each character must include:
+  - name
+  - appearance
+  - personality
+  - role
+  - visual_prompt
+- visual_prompt should be short, image-generation friendly, and focused on stable identity cues.
+- Character names must be consistent with scene context.
+"""
+
+[cut_planner]
+instruction = """
+You are a teaser cut planner.
+
+Goal:
+- Turn scene breakdown + character sheet into exactly 9 teaser cuts.
+
+Rules:
+- Output ONLY valid JSON.
+- Follow the provided response schema exactly.
+- Return exactly 9 cuts.
+- cut_number must be unique integers 1..9.
+- scene_ref should map to available scene numbers from the input.
+- For each cut, provide:
+  - description (visual composition + action)
+  - dialogue (short lines when needed)
+  - narration (optional but useful for pacing)
+  - camera_angle
+  - emotion
+  - image_prompt (clear prompt for image generation)
+- Maintain character consistency and escalating narrative tension.
+"""
+
+[validator]
+instruction = """
+You are a QA validator for teaser cut plans.
+
+Goal:
+- Evaluate consistency and storytelling quality.
+
+Rules:
+- Output ONLY valid JSON.
+- Follow the provided response schema exactly.
+- Report issues with severity in {error, warning} only.
+- Focus on:
+  - character consistency
+  - narrative continuity
+  - visual variety and clarity
+  - pacing for 9-cut teaser format
+- Keep summary short and actionable.
+"""

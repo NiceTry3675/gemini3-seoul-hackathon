@@ -9,13 +9,21 @@ from app.domain.cut_planner.schemas import CutPlan
 from app.domain.validator.schemas import ValidationReport
 
 OutputMode = Literal["image", "video", "mixed"]
-StyleTemplate = Literal["webtoon_cel", "cinematic_realism", "watercolor_dream", "digital_masterpaint"]
+StyleTemplate = Literal[
+    "webtoon_cel",
+    "cinematic_realism",
+    "watercolor_dream",
+    "digital_masterpaint",
+    "manga_bw",
+    "noir_graphic",
+    "ghibli_pastoral",
+]
 
 
 class ContiRequest(BaseModel):
     manuscript: str = Field(..., max_length=200_000)
-    genre: str
-    tone: str
+    genre: str = Field(default="unspecified")
+    tone: str = Field(default="unspecified")
     output_language: str = Field(default="ko")
     output_mode: OutputMode = "image"
     style_template: StyleTemplate = "webtoon_cel"
@@ -40,7 +48,7 @@ class ContiResult(BaseModel):
 
 
 class PipelineProgress(BaseModel):
-    step: int = Field(..., ge=1, le=6)
+    step: int = Field(..., ge=1, le=5)
     step_name: str
     status: str = Field(..., pattern="^(running|completed|failed)$")
     detail: str | None = None

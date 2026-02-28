@@ -41,6 +41,21 @@ export const PIPELINE_STYLE_OPTIONS: PipelineStyleOption[] = [
     title: 'Digital Masterpaint',
     description: 'Rich digital painting with bold texture and saturated color.',
   },
+  {
+    id: 'manga_bw',
+    title: 'Manga BW',
+    description: 'High-contrast monochrome manga ink style with dynamic screentone energy.',
+  },
+  {
+    id: 'noir_graphic',
+    title: 'Noir Graphic',
+    description: 'Graphic novel noir look with hard shadows and dramatic contrast.',
+  },
+  {
+    id: 'ghibli_pastoral',
+    title: 'Ghibli Pastoral',
+    description: 'Warm, painterly pastoral atmosphere with whimsical natural lighting.',
+  },
 ];
 
 export const STORY_PLACEHOLDER =

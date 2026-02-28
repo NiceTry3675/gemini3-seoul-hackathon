@@ -611,12 +611,12 @@ class TestContiGenerateRouter:
         )
         assert response.status_code == 422
 
-    def test_generate_returns_422_on_missing_genre(self, test_client):
+    def test_generate_accepts_missing_genre_with_default(self, test_client):
         response = test_client.post(
             "/api/pipeline/generate",
             json={"manuscript": "test", "tone": "warm"},
         )
-        assert response.status_code == 422
+        assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------

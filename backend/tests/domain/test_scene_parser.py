@@ -248,12 +248,15 @@ class TestSceneParseRouter:
         )
         assert response.status_code == 422
 
-    def test_scene_parse_returns_422_on_missing_genre(self, test_client):
+    def test_scene_parse_uses_default_genre_when_missing(self, test_client, mock_genai_client):
+        mock_genai_client.aio.models.generate_content.return_value = mock_structured_response(
+            _valid_scene_breakdown_json()
+        )
         response = test_client.post(
             "/api/pipeline/scene-parse",
             json={"manuscript": "test", "tone": "warm"},
         )
-        assert response.status_code == 422
+        assert response.status_code == 200
 
     def test_scene_parse_returns_429_on_quota_exceeded(self, test_client, mock_genai_client):
         mock_genai_client.aio.models.generate_content.side_effect = Exception("429 quota exceeded")

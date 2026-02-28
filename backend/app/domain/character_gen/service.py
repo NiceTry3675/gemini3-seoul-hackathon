@@ -42,12 +42,14 @@ class CharacterGenService:
             f"Scene {s.scene_number} - {s.title}: {s.summary} (characters: {', '.join(s.characters)})"
             for s in request.scene_breakdown.scenes
         )
-        user_prompt = (
-            f"Genre: {request.novel_input.genre}\n"
-            f"Tone: {request.novel_input.tone}\n"
-            f"Output language: {request.novel_input.output_language}\n\n"
-            f"Scene breakdown:\n{scenes_summary}"
-        )
+        context_lines: list[str] = [f"Output language: {request.novel_input.output_language}"]
+        if request.novel_input.genre and request.novel_input.genre != "unspecified":
+            context_lines.append(f"Genre: {request.novel_input.genre}")
+        if request.novel_input.tone and request.novel_input.tone != "unspecified":
+            context_lines.append(f"Tone: {request.novel_input.tone}")
+        context_block = "\n".join(context_lines)
+
+        user_prompt = f"{context_block}\n\nScene breakdown:\n{scenes_summary}"
 
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,

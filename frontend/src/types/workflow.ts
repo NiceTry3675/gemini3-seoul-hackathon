@@ -147,7 +147,10 @@ export type PipelineStyleTemplate =
   | 'webtoon_cel'
   | 'cinematic_realism'
   | 'watercolor_dream'
-  | 'digital_masterpaint';
+  | 'digital_masterpaint'
+  | 'manga_bw'
+  | 'noir_graphic'
+  | 'ghibli_pastoral';
 
 export interface PipelineStyleOption {
   id: PipelineStyleTemplate;

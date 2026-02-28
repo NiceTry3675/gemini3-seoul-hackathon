@@ -30,12 +30,14 @@ class SceneParserService:
         try:
             system_instruction = self._pm.get_system_instruction("scene_parser.instruction")
 
-            user_prompt = (
-                f"Genre: {novel_input.genre}\n"
-                f"Tone: {novel_input.tone}\n"
-                f"Output language: {novel_input.output_language}\n\n"
-                f"Manuscript:\n{novel_input.manuscript}"
-            )
+            context_lines: list[str] = [f"Output language: {novel_input.output_language}"]
+            if novel_input.genre and novel_input.genre != "unspecified":
+                context_lines.append(f"Genre: {novel_input.genre}")
+            if novel_input.tone and novel_input.tone != "unspecified":
+                context_lines.append(f"Tone: {novel_input.tone}")
+            context_block = "\n".join(context_lines)
+
+            user_prompt = f"{context_block}\n\nManuscript:\n{novel_input.manuscript}"
 
             config = types.GenerateContentConfig(
                 system_instruction=system_instruction,

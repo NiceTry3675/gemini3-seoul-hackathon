@@ -12,14 +12,10 @@ import type {
 
 interface StoryInputScreenProps {
   manuscript: string;
-  genre: string;
-  tone: string;
   outputLanguage: PipelineOutputLanguage;
   styleTemplate: PipelineStyleTemplate;
   canSubmit: boolean;
   onManuscriptChange: (value: string) => void;
-  onGenreChange: (value: string) => void;
-  onToneChange: (value: string) => void;
   onOutputLanguageChange: (value: PipelineOutputLanguage) => void;
   onStyleTemplateChange: (value: PipelineStyleTemplate) => void;
   onSubmit: () => void;
@@ -27,14 +23,10 @@ interface StoryInputScreenProps {
 
 export default function StoryInputScreen({
   manuscript,
-  genre,
-  tone,
   outputLanguage,
   styleTemplate,
   canSubmit,
   onManuscriptChange,
-  onGenreChange,
-  onToneChange,
   onOutputLanguageChange,
   onStyleTemplateChange,
   onSubmit,
@@ -52,28 +44,6 @@ export default function StoryInputScreen({
         </section>
 
         <section className="grid grid-cols-1 gap-4 rounded-2xl border border-ts-border bg-ts-panel/70 p-6 md:grid-cols-2">
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-semibold text-slate-200">Genre</span>
-            <input
-              type="text"
-              value={genre}
-              onChange={(event) => onGenreChange(event.target.value)}
-              placeholder="fantasy"
-              className="rounded-lg border border-ts-border bg-[#101624] px-3 py-2 text-slate-100 outline-none focus:border-ts-primary"
-            />
-          </label>
-
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-semibold text-slate-200">Tone</span>
-            <input
-              type="text"
-              value={tone}
-              onChange={(event) => onToneChange(event.target.value)}
-              placeholder="mysterious"
-              className="rounded-lg border border-ts-border bg-[#101624] px-3 py-2 text-slate-100 outline-none focus:border-ts-primary"
-            />
-          </label>
-
           <label className="flex flex-col gap-2">
             <span className="text-sm font-semibold text-slate-200">Output Language</span>
             <select

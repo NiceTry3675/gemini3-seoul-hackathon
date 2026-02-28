@@ -28,11 +28,7 @@ export function createInitialWorkflowState(): PipelineWorkflowState {
 }
 
 export function canStartPipeline(state: PipelineWorkflowState): boolean {
-  return (
-    state.storyInput.manuscript.trim().length > 0
-    && state.storyInput.genre.trim().length > 0
-    && state.storyInput.tone.trim().length > 0
-  );
+  return state.storyInput.manuscript.trim().length > 0;
 }
 
 export function workflowReducer(
@@ -114,7 +110,9 @@ export function workflowReducer(
         ...state,
         processing: {
           ...state.processing,
-          running: action.payload.status === 'running',
+          // Keep stream active across step-level "completed" updates.
+          // Pipeline stops only on explicit failure or terminal success action.
+          running: action.payload.status === 'failed' ? false : state.processing.running,
           progressByStep: {
             ...state.processing.progressByStep,
             [action.payload.step]: action.payload,

@@ -84,12 +84,19 @@ def mock_image_gen():
 
 
 @pytest.fixture
+def mock_video_gen():
+    with patch("app.domain.conti.service.GeminiVideoService") as cls:
+        yield cls.return_value
+
+
+@pytest.fixture
 def patched_services(
     mock_scene_parser,
     mock_char_gen,
     mock_cut_planner,
     mock_validator,
     mock_image_gen,
+    mock_video_gen,
     sample_scene_breakdown,
     sample_character_sheet,
     sample_cut_plan,
@@ -99,6 +106,7 @@ def patched_services(
 
     char_resp = MagicMock()
     char_resp.character_sheet = sample_character_sheet
+    char_resp.reference_images = {"Alice": "ref_b64_alice", "Bob": "ref_b64_bob"}
     mock_char_gen.generate.return_value = char_resp
 
     mock_cut_planner.plan.return_value = sample_cut_plan
@@ -111,12 +119,17 @@ def patched_services(
     img_resp = ImageGenerationResponse(image_base64="base64data", mime_type="image/png")
     mock_image_gen.generate.return_value = img_resp
 
+    from app.domain.video_generation.schemas import VideoGenerationResponse
+    vid_resp = VideoGenerationResponse(video_base64="video_b64_data", mime_type="video/mp4")
+    mock_video_gen.generate = AsyncMock(return_value=vid_resp)
+
     return {
         "scene_parser": mock_scene_parser,
         "char_gen": mock_char_gen,
         "cut_planner": mock_cut_planner,
         "validator": mock_validator,
         "image_gen": mock_image_gen,
+        "video_gen": mock_video_gen,
     }
 
 
@@ -494,7 +507,7 @@ class TestContiOrchestratorSSEFormat:
             assert "step" in data
             assert "step_name" in data
             assert "status" in data
-            assert data["step"] in range(1, 6)
+            assert data["step"] in range(1, 7)
             assert data["status"] in ("running", "completed", "failed")
 
     @pytest.mark.asyncio
@@ -550,6 +563,7 @@ class TestContiGenerateRouter:
     ):
         from app.domain.validator.schemas import ValidationReport
         from app.domain.image_generation.schemas import ImageGenerationResponse
+        from app.domain.video_generation.schemas import VideoGenerationResponse
 
         with (
             patch("app.domain.conti.service.SceneParserService") as sp_cls,
@@ -557,10 +571,12 @@ class TestContiGenerateRouter:
             patch("app.domain.conti.service.CutPlannerService") as cp_cls,
             patch("app.domain.conti.service.ValidatorService") as v_cls,
             patch("app.domain.conti.service.GeminiImageService") as ig_cls,
+            patch("app.domain.conti.service.GeminiVideoService") as vg_cls,
         ):
             sp_cls.return_value.parse.return_value = sample_scene_breakdown
             char_resp = MagicMock()
             char_resp.character_sheet = sample_character_sheet
+            char_resp.reference_images = {}
             cg_cls.return_value.generate.return_value = char_resp
             cp_cls.return_value.plan.return_value = sample_cut_plan
             v_cls.return_value.validate.return_value = ValidationReport(
@@ -568,6 +584,9 @@ class TestContiGenerateRouter:
             )
             ig_cls.return_value.generate.return_value = ImageGenerationResponse(
                 image_base64="data", mime_type="image/png"
+            )
+            vg_cls.return_value.generate.return_value = VideoGenerationResponse(
+                video_base64="vid", mime_type="video/mp4"
             )
 
             response = test_client.post("/api/pipeline/generate", json=self._valid_payload())
@@ -584,5 +603,202 @@ class TestContiGenerateRouter:
         response = test_client.post(
             "/api/pipeline/generate",
             json={"manuscript": "test", "tone": "warm"},
+        )
+        assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Service: reference_images passed from character_gen to image_gen
+# ---------------------------------------------------------------------------
+
+class TestContiOrchestratorReferenceImages:
+    @pytest.mark.asyncio
+    async def test_reference_images_passed_to_image_gen(
+        self, mock_genai_client, patched_services
+    ):
+        service = _make_service(mock_genai_client)
+        events = await _collect_events(service.generate(_make_conti_request()))
+        result_data = _parse_data(_result_events(events)[0])
+
+        # reference_images should appear in the result
+        assert result_data["reference_images"] == {"Alice": "ref_b64_alice", "Bob": "ref_b64_bob"}
+
+        # image_gen.generate should have been called with reference_images
+        calls = patched_services["image_gen"].generate.call_args_list
+        assert len(calls) > 0
+        for call in calls:
+            req = call[0][0]
+            assert req.reference_images == {"Alice": "ref_b64_alice", "Bob": "ref_b64_bob"}
+
+    @pytest.mark.asyncio
+    async def test_empty_reference_images_still_works(
+        self, mock_genai_client, patched_services
+    ):
+        patched_services["char_gen"].generate.return_value.reference_images = {}
+        service = _make_service(mock_genai_client)
+        events = await _collect_events(service.generate(_make_conti_request()))
+        assert len(_result_events(events)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Service: output_mode branching (video, mixed)
+# ---------------------------------------------------------------------------
+
+class TestContiOrchestratorOutputMode:
+    @pytest.mark.asyncio
+    async def test_video_mode_calls_video_gen_not_image_gen(
+        self, mock_genai_client, patched_services
+    ):
+        request = ContiRequest(
+            manuscript="A hero rises.", genre="action", tone="dark",
+            output_language="ko", output_mode="video",
+        )
+        service = _make_service(mock_genai_client)
+        events = await _collect_events(service.generate(request))
+        assert len(_result_events(events)) == 1
+
+        patched_services["image_gen"].generate.assert_not_called()
+        assert patched_services["video_gen"].generate.call_count > 0
+
+        result_data = _parse_data(_result_events(events)[0])
+        for cut in result_data["cuts"]:
+            assert cut["video_base64"] == "video_b64_data"
+            assert cut["image_base64"] == ""
+
+    @pytest.mark.asyncio
+    async def test_mixed_mode_calls_both_image_and_video_gen(
+        self, mock_genai_client, patched_services
+    ):
+        request = ContiRequest(
+            manuscript="A hero rises.", genre="action", tone="dark",
+            output_language="ko", output_mode="mixed",
+        )
+        service = _make_service(mock_genai_client)
+        events = await _collect_events(service.generate(request))
+        assert len(_result_events(events)) == 1
+
+        assert patched_services["image_gen"].generate.call_count > 0
+        assert patched_services["video_gen"].generate.call_count > 0
+
+        result_data = _parse_data(_result_events(events)[0])
+        for cut in result_data["cuts"]:
+            assert cut["image_base64"] == "base64data"
+            assert cut["video_base64"] == "video_b64_data"
+
+    @pytest.mark.asyncio
+    async def test_image_mode_does_not_call_video_gen(
+        self, mock_genai_client, patched_services
+    ):
+        service = _make_service(mock_genai_client)
+        events = await _collect_events(service.generate(_make_conti_request()))
+        assert len(_result_events(events)) == 1
+        patched_services["video_gen"].generate.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Service: generate_media_batch (interactive pipeline)
+# ---------------------------------------------------------------------------
+
+class TestContiOrchestratorGenerateMediaBatch:
+    @pytest.mark.asyncio
+    async def test_generate_media_batch_image_mode(
+        self, mock_genai_client, patched_services, sample_cut_plan, sample_character_sheet
+    ):
+        from app.domain.conti.schemas import GenerateMediaRequest
+        req = GenerateMediaRequest(
+            cut_plan=sample_cut_plan,
+            character_sheet=sample_character_sheet,
+            output_mode="image",
+            reference_images={"Alice": "ref_b64"},
+        )
+        service = _make_service(mock_genai_client)
+        resp = await service.generate_media_batch(req)
+        assert len(resp.cuts) == 12
+        for cut in resp.cuts:
+            assert cut.image_base64 == "base64data"
+            assert cut.video_base64 == ""
+
+    @pytest.mark.asyncio
+    async def test_generate_media_batch_video_mode(
+        self, mock_genai_client, patched_services, sample_cut_plan, sample_character_sheet
+    ):
+        from app.domain.conti.schemas import GenerateMediaRequest
+        req = GenerateMediaRequest(
+            cut_plan=sample_cut_plan,
+            character_sheet=sample_character_sheet,
+            output_mode="video",
+        )
+        service = _make_service(mock_genai_client)
+        resp = await service.generate_media_batch(req)
+        assert len(resp.cuts) == 12
+        for cut in resp.cuts:
+            assert cut.image_base64 == ""
+            assert cut.video_base64 == "video_b64_data"
+
+    @pytest.mark.asyncio
+    async def test_generate_media_batch_mixed_mode(
+        self, mock_genai_client, patched_services, sample_cut_plan, sample_character_sheet
+    ):
+        from app.domain.conti.schemas import GenerateMediaRequest
+        req = GenerateMediaRequest(
+            cut_plan=sample_cut_plan,
+            character_sheet=sample_character_sheet,
+            output_mode="mixed",
+        )
+        service = _make_service(mock_genai_client)
+        resp = await service.generate_media_batch(req)
+        assert len(resp.cuts) == 12
+        for cut in resp.cuts:
+            assert cut.image_base64 == "base64data"
+            assert cut.video_base64 == "video_b64_data"
+
+
+# ---------------------------------------------------------------------------
+# Router: POST /api/pipeline/step/generate-media
+# ---------------------------------------------------------------------------
+
+class TestGenerateMediaRouter:
+    def _valid_payload(self, sample_cut_plan, sample_character_sheet):
+        return {
+            "cut_plan": sample_cut_plan.model_dump(),
+            "character_sheet": sample_character_sheet.model_dump(),
+            "output_mode": "image",
+            "reference_images": {},
+        }
+
+    def test_generate_media_returns_200(
+        self, test_client, mock_genai_client,
+        sample_cut_plan, sample_character_sheet
+    ):
+        from app.domain.image_generation.schemas import ImageGenerationResponse
+        from app.domain.video_generation.schemas import VideoGenerationResponse
+
+        with (
+            patch("app.domain.conti.service.SceneParserService"),
+            patch("app.domain.conti.service.CharacterGenService"),
+            patch("app.domain.conti.service.CutPlannerService"),
+            patch("app.domain.conti.service.ValidatorService"),
+            patch("app.domain.conti.service.GeminiImageService") as ig_cls,
+            patch("app.domain.conti.service.GeminiVideoService") as vg_cls,
+        ):
+            ig_cls.return_value.generate.return_value = ImageGenerationResponse(
+                image_base64="data", mime_type="image/png"
+            )
+            vg_cls.return_value.generate.return_value = VideoGenerationResponse(
+                video_base64="vid", mime_type="video/mp4"
+            )
+
+            response = test_client.post(
+                "/api/pipeline/step/generate-media",
+                json=self._valid_payload(sample_cut_plan, sample_character_sheet),
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["cuts"]) == 12
+
+    def test_generate_media_returns_422_on_invalid_body(self, test_client):
+        response = test_client.post(
+            "/api/pipeline/step/generate-media",
+            json={"output_mode": "image"},
         )
         assert response.status_code == 422

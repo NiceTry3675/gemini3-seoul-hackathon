@@ -135,6 +135,29 @@ class TestGeminiImageServiceGenerate:
         with pytest.raises(GeminiAPIError):
             service.generate(ImageGenerationRequest(prompt="test"))
 
+    def test_generate_with_reference_images_builds_multipart_contents(self, mock_genai_client):
+        raw = b"generated image"
+        mock_genai_client.models.generate_content.return_value = _make_image_response(raw)
+        service = _make_service(mock_genai_client)
+        result = service.generate(ImageGenerationRequest(
+            prompt="A cat",
+            reference_images={"Alice": "cmVmX2RhdGE="},  # base64("ref_data")
+        ))
+        assert result.image_base64 == base64.b64encode(raw).decode("utf-8")
+        # Verify generate_content was called with a list (multipart), not a string
+        call_args = mock_genai_client.models.generate_content.call_args
+        contents = call_args.kwargs.get("contents") or call_args[1].get("contents")
+        assert isinstance(contents, list)
+
+    def test_generate_without_reference_images_uses_string_prompt(self, mock_genai_client):
+        raw = b"generated image"
+        mock_genai_client.models.generate_content.return_value = _make_image_response(raw)
+        service = _make_service(mock_genai_client)
+        service.generate(ImageGenerationRequest(prompt="A cat"))
+        call_args = mock_genai_client.models.generate_content.call_args
+        contents = call_args.kwargs.get("contents") or call_args[1].get("contents")
+        assert isinstance(contents, str)
+
     def test_generate_skips_text_parts_to_find_image(self, mock_genai_client):
         """Parts before the image part have no inline_data."""
         raw = b"image data"

@@ -94,7 +94,30 @@ class GeminiVideoService:
                 raise GeminiAPIError("Video generation returned no results")
 
             video = operation.response.generated_videos[0]
-            video_base64 = base64.b64encode(video.video.video_bytes).decode("utf-8")
+
+            # Try video_bytes first, then fall back to downloading from URI
+            raw_bytes = getattr(video.video, 'video_bytes', None)
+            if raw_bytes is None:
+                video_uri = getattr(video.video, 'uri', None) or getattr(video.video, 'video_uri', None)
+                if video_uri:
+                    import httpx
+                    headers = {"x-goog-api-key": settings.GOOGLE_API_KEY}
+                    async with httpx.AsyncClient(
+                        timeout=180,
+                        follow_redirects=True,
+                        headers=headers,
+                    ) as http_client:
+                        resp = await http_client.get(video_uri)
+                        resp.raise_for_status()
+                        raw_bytes = resp.content
+                    if not raw_bytes:
+                        raise GeminiAPIError("Downloaded video file is empty")
+                else:
+                    raise GeminiAPIError(
+                        f"Video has no bytes or URI. Video attrs: {dir(video.video)}"
+                    )
+
+            video_base64 = base64.b64encode(raw_bytes).decode("utf-8")
 
             return VideoGenerationResponse(video_base64=video_base64)
         except (QuotaExceededError, SafetyBlockError, GeminiAPIError):

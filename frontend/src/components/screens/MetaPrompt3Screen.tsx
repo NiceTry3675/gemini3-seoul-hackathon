@@ -1,63 +1,34 @@
-import { useEffect, useState } from 'react';
 import BottomActionBar from '../layout/BottomActionBar';
 import StepProgress from '../layout/StepProgress';
 import TopNav from '../layout/TopNav';
-import { PRIMARY_NAV_LINKS } from '../../data/workflowData';
-import type { FrameSelection } from '../../types/workflow';
+import { PRIMARY_NAV_LINKS, FRAME_SEQUENCE } from '../../data/workflowData';
+import type { ProcessingState, VideoExportModel } from '../../types/workflow';
 
 interface MetaPrompt3ScreenProps {
-  frameSelections: FrameSelection[];
-  onSelectOption: (frameIndex: number, optionId: string) => void;
+  storyText: string;
+  selectedStyle: string | null;
+  processing: ProcessingState;
+  videoExport: VideoExportModel | null;
   onStartOver: () => void;
   onGenerateTeaser: () => void;
+  onNext: () => void;
   onBack: () => void;
 }
 
-function getCurrentFrame(frameSelections: FrameSelection[]): FrameSelection {
-  const active = frameSelections.find((frame) => frame.status === 'active');
-  if (active) {
-    return active;
-  }
-
-  return frameSelections[frameSelections.length - 1];
-}
-
 export default function MetaPrompt3Screen({
-  frameSelections,
-  onSelectOption,
+  storyText,
+  selectedStyle,
+  processing,
+  videoExport,
   onStartOver,
   onGenerateTeaser,
+  onNext,
   onBack,
 }: MetaPrompt3ScreenProps) {
-  const [loadingCutId, setLoadingCutId] = useState<number | null>(null);
-  const currentFrame = getCurrentFrame(frameSelections);
-  const completedCuts = frameSelections.filter((frame) => frame.selectedOptionId !== null).length;
-  const totalCuts = frameSelections.length;
-  const allGenerated = completedCuts === totalCuts;
-
-  useEffect(() => {
-    if (allGenerated || currentFrame.status !== 'active' || currentFrame.selectedOptionId !== null) {
-      setLoadingCutId(null);
-      return;
-    }
-
-    const nextOption = currentFrame.options[0];
-    if (!nextOption) {
-      setLoadingCutId(null);
-      return;
-    }
-
-    setLoadingCutId(currentFrame.frameIndex);
-
-    const timer = window.setTimeout(() => {
-      onSelectOption(currentFrame.frameIndex, nextOption.id);
-      setLoadingCutId(null);
-    }, 900);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [allGenerated, currentFrame, onSelectOption]);
+  const storySnippet = storyText.trim().slice(0, 120);
+  const isGenerating = processing.running;
+  const hasImages = videoExport !== null && videoExport.sourceFrames.length > 0;
+  const hasError = Boolean(processing.errorMessage);
 
   return (
     <div className="min-h-screen">
@@ -66,7 +37,7 @@ export default function MetaPrompt3Screen({
       <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-36 pt-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 4 OF 4"
-          nextLabel="In Progress"
+          nextLabel="Generate"
           labels={['Story', 'Meta', 'Visuals', 'Export']}
           currentIndex={4}
         />
@@ -75,116 +46,151 @@ export default function MetaPrompt3Screen({
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <h2 className="text-5xl font-black tracking-tight text-slate-50">
-                Generating Cut {allGenerated ? totalCuts : Math.min(completedCuts + 1, totalCuts)} of {totalCuts}
+                {hasImages ? 'Teaser Generated' : isGenerating ? 'Generating...' : 'Ready to Generate'}
               </h2>
               <p className="mt-2 text-lg text-slate-400">
-                Cuts are generated automatically one by one. Continue after all 9 cuts are ready.
+                {hasImages
+                  ? '9컷 티저가 생성되었습니다. 결과를 확인하세요.'
+                  : isGenerating
+                    ? 'AI가 3x3 그리드로 9컷 티저를 생성하고 있습니다...'
+                    : 'AI가 3x3 그리드로 9컷 티저를 한 번에 생성합니다.'}
               </p>
             </div>
             <span className="inline-flex items-center gap-2 rounded-full border border-ts-border bg-ts-panel/60 px-3 py-1 text-xs text-ts-text-muted">
               <span className="material-symbols-outlined text-base text-ts-primary">auto_awesome</span>
-              {loadingCutId !== null && !allGenerated
-                ? `Rendering Cut ${String(loadingCutId).padStart(2, '0')}...`
-                : `${completedCuts}/${totalCuts} complete`}
+              9 panels · 1 image
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {frameSelections.map((frame) => {
-              const isActive = frame.status === 'active';
-              const isComplete = frame.status === 'complete';
-              const isLoading = loadingCutId === frame.frameIndex && !isComplete;
-              const selectedOption = frame.options.find((option) => option.id === frame.selectedOptionId);
-              return (
-                <div
-                  key={frame.frameIndex}
-                  className={`rounded-xl border p-4 ${
-                    isActive
-                      ? 'border-[#2b6cee] bg-[#1a2337] shadow-[0_0_16px_rgba(43,108,238,0.35)]'
-                      : isComplete
-                        ? 'border-slate-700 bg-[#141c2f]'
-                        : 'border-slate-800 bg-[#111827] opacity-60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-sm font-bold uppercase">
-                    <span className={isActive ? 'text-[#2b6cee]' : 'text-slate-400'}>
-                      Cut {String(frame.frameIndex).padStart(2, '0')}
-                    </span>
-                    {frame.status === 'locked' ? (
-                      <span className="material-symbols-outlined text-base text-slate-500">lock</span>
-                    ) : frame.status === 'complete' ? (
-                      <span className="material-symbols-outlined text-base text-emerald-400">check_circle</span>
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-700/60 bg-[#151b26] p-5">
+              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span className="material-symbols-outlined text-base text-[#2b6cee]">description</span>
+                Story
+              </div>
+              <p className="text-sm leading-relaxed text-slate-300 line-clamp-3">
+                {storySnippet}{storyText.length > 120 ? '...' : ''}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-700/60 bg-[#151b26] p-5">
+              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span className="material-symbols-outlined text-base text-[#2b6cee]">palette</span>
+                Visual Style
+              </div>
+              <p className="text-lg font-bold text-slate-200">
+                {selectedStyle?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Not selected'}
+              </p>
+            </div>
+          </div>
+
+          {/* Error message */}
+          {hasError && (
+            <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-5">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined mt-0.5 text-red-400">error</span>
+                <div>
+                  <p className="font-semibold text-red-300">Generation failed</p>
+                  <p className="mt-1 text-sm text-red-200/80">{processing.errorMessage}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 9-panel layout with generated images */}
+          <div className="rounded-xl border border-slate-700/60 bg-[#151b26] p-5">
+            <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <span className="material-symbols-outlined text-base text-[#2b6cee]">grid_view</span>
+              9-Panel Storyboard Layout
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {FRAME_SEQUENCE.map((label, idx) => {
+                const frame = hasImages ? videoExport.sourceFrames.find((f) => f.index === idx + 1) : null;
+
+                return (
+                  <div
+                    key={idx}
+                    className="relative aspect-square overflow-hidden rounded-lg border border-slate-700/40 bg-slate-800/40"
+                  >
+                    {frame ? (
+                      <>
+                        <img
+                          src={frame.imageUrl}
+                          alt={`Cut ${idx + 1}: ${label}`}
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-4">
+                          <span className="text-[10px] font-semibold text-white/90">{idx + 1}. {label}</span>
+                        </div>
+                      </>
+                    ) : isGenerating ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-2">
+                        <div className="size-6 animate-spin rounded-full border-2 border-[#2b6cee] border-t-transparent" />
+                        <span className="text-[10px] text-slate-500">{label}</span>
+                      </div>
                     ) : (
-                      <span className="material-symbols-outlined animate-pulse text-base text-[#2b6cee]">
-                        pending
-                      </span>
+                      <div className="flex h-full flex-col items-center justify-center">
+                        <span className="text-lg font-bold text-[#2b6cee]">{idx + 1}</span>
+                        <span className="mt-1 text-[10px] text-slate-500">{label}</span>
+                      </div>
                     )}
                   </div>
-
-                  {selectedOption ? (
-                    <div className="relative mt-3 h-32 overflow-hidden rounded-lg border border-slate-700 bg-slate-900/50">
-                      <img
-                        src={selectedOption.imageUrl}
-                        alt={`Cut ${frame.frameIndex}`}
-                        className="h-full w-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                    </div>
-                  ) : isLoading ? (
-                    <div className="relative mt-3 h-32 overflow-hidden rounded-lg border border-ts-primary/40 bg-slate-900/60">
-                      <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-slate-800/30 via-ts-primary/10 to-slate-800/30" />
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                        <span className="material-symbols-outlined animate-spin text-2xl text-ts-primary">
-                          progress_activity
-                        </span>
-                        <span className="text-xs font-medium text-ts-text-muted">Generating image...</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-3 flex h-32 items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-900/50">
-                      <span className="material-symbols-outlined text-4xl text-slate-500">image</span>
-                    </div>
-                  )}
-
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                    <span>{frame.sequenceLabel}</span>
-                    <span>
-                      {isLoading
-                        ? 'Rendering...'
-                        : isActive
-                          ? 'Queued'
-                          : isComplete
-                            ? 'Ready'
-                            : `Waiting ${frame.frameIndex - 1}`}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+
+          {!hasImages && !isGenerating && (
+            <div className="flex items-start gap-3 rounded-lg border border-[#2b6cee]/20 bg-[#2b6cee]/10 p-4">
+              <span className="material-symbols-outlined mt-0.5 shrink-0 text-[#2b6cee]">info</span>
+              <p className="text-sm leading-relaxed text-slate-300">
+                <span className="font-bold text-[#2b6cee]">How it works:</span> AI generates a character anchor image,
+                then creates all 9 panels in a single 3x3 grid image for speed and consistency.
+              </p>
+            </div>
+          )}
         </section>
       </main>
 
       <BottomActionBar
         backAction={{ label: 'Back', icon: 'arrow_back', onClick: onBack, emphasis: 'outline' }}
-        primaryAction={{
-          label: 'Next: Export Preview',
-          icon: 'movie_filter',
-          onClick: onGenerateTeaser,
-          disabled: !allGenerated,
-          emphasis: 'primary',
-        }}
-        hint="Cuts are generated automatically up to 9 before export."
+        primaryAction={
+          hasImages
+            ? {
+                label: 'Next: Video Export',
+                icon: 'arrow_forward',
+                onClick: onNext,
+                emphasis: 'primary',
+              }
+            : hasError
+              ? {
+                  label: 'Retry',
+                  icon: 'refresh',
+                  onClick: onGenerateTeaser,
+                  emphasis: 'primary',
+                }
+              : {
+                  label: isGenerating ? 'Generating...' : 'Generate Teaser',
+                  icon: 'movie_filter',
+                  onClick: onGenerateTeaser,
+                  disabled: isGenerating,
+                  emphasis: 'primary',
+                }
+        }
+        hint={hasImages ? 'Your teaser is ready. Proceed to video export.' : isGenerating ? 'Please wait while AI generates your teaser...' : 'Click to generate your 9-panel teaser.'}
       />
 
-      <button
-        type="button"
-        onClick={onStartOver}
-        className="fixed bottom-24 left-6 rounded-lg border border-slate-700 bg-[#0d162c]/90 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 lg:left-10"
-      >
-        <span className="material-symbols-outlined mr-1 align-middle text-sm">restart_alt</span>
-        Start Over
-      </button>
+      {!isGenerating && (
+        <button
+          type="button"
+          onClick={onStartOver}
+          className="fixed bottom-24 left-6 rounded-lg border border-slate-700 bg-[#0d162c]/90 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 lg:left-10"
+        >
+          <span className="material-symbols-outlined mr-1 align-middle text-sm">restart_alt</span>
+          Start Over
+        </button>
+      )}
     </div>
   );
 }

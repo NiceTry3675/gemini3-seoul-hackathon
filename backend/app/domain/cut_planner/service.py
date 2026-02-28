@@ -45,8 +45,8 @@ class CutPlannerService:
                 f"Output language: {request.novel_input.output_language}\n\n"
                 f"Scene breakdown:\n{scenes_summary}\n\n"
                 f"Characters:\n{characters_summary}\n\n"
-                "Create EXACTLY 12 cuts that tell the story visually. "
-                "Each cut must have a unique cut_number from 1 to 12."
+                "Create EXACTLY 9 cuts that tell the story visually. "
+                "Each cut must have a unique cut_number from 1 to 9."
             )
 
             config = types.GenerateContentConfig(

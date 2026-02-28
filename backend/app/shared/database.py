@@ -11,8 +11,8 @@ _SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS pipeline_runs (
     id              TEXT PRIMARY KEY,
     manuscript      TEXT NOT NULL,
-    genre           TEXT NOT NULL,
-    tone            TEXT NOT NULL,
+    genre           TEXT NOT NULL DEFAULT '',
+    tone            TEXT NOT NULL DEFAULT '',
     output_language TEXT NOT NULL DEFAULT 'ko',
     output_mode     TEXT NOT NULL DEFAULT 'image',
     status          TEXT NOT NULL DEFAULT 'running',

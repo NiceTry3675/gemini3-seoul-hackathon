@@ -6,6 +6,12 @@ BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+BACKEND_READY_TIMEOUT_SECONDS="${BACKEND_READY_TIMEOUT_SECONDS:-30}"
+if [[ -n "${BACKEND_APP_MODULE:-}" ]]; then
+  BACKEND_APP_MODULES="$BACKEND_APP_MODULE"
+else
+  BACKEND_APP_MODULES="${BACKEND_APP_MODULES:-app.main}"
+fi
 DEFAULT_VENV_PY="$ROOT_DIR/.venv/bin/python"
 PYTHON_BIN="${PYTHON_BIN:-}"
 
@@ -57,8 +63,27 @@ if [[ ! -d "$ROOT_DIR/frontend/node_modules" ]]; then
   (cd "$ROOT_DIR/frontend" && npm install)
 fi
 
+kill_port() {
+  local port="$1"
+  local pids
+  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    echo "Killing existing processes on port $port (PIDs: $(echo $pids | tr '\n' ' '))..."
+    echo "$pids" | xargs kill 2>/dev/null || true
+    sleep 1
+    # Force kill any remaining
+    pids=$(lsof -ti :"$port" 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+      echo "$pids" | xargs kill -9 2>/dev/null || true
+    fi
+  fi
+}
+
 ensure_python_bin
 ensure_backend_deps
+
+kill_port "$BACKEND_PORT"
+kill_port "$FRONTEND_PORT"
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -78,14 +103,93 @@ cleanup() {
   wait "$FRONTEND_PID" >/dev/null 2>&1 || true
 }
 
+wait_for_backend() {
+  local endpoint="http://${BACKEND_HOST}:${BACKEND_PORT}"
+  local elapsed=0
+  local paths=("/api/health" "/healthz" "/")
+
+  while (( elapsed < BACKEND_READY_TIMEOUT_SECONDS )); do
+    if command -v curl >/dev/null 2>&1; then
+      for path in "${paths[@]}"; do
+        if curl -sSf "${endpoint}${path}" >/dev/null 2>&1; then
+          return 0
+        fi
+      done
+    else
+      if command -v nc >/dev/null 2>&1; then
+        if nc -z "$BACKEND_HOST" "$BACKEND_PORT" >/dev/null 2>&1; then
+          return 0
+        fi
+      fi
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
+normalize_backend_module() {
+  local module="$1"
+  if [[ "$module" == backend.* ]]; then
+    module="${module#backend.}"
+  fi
+  echo "$module"
+}
+
+verify_backend_module() {
+  local module="$1"
+  local normalized
+  normalized="$(normalize_backend_module "$module")"
+  local -r check_cmd="import importlib.util; import sys; sys.path.insert(0, '$ROOT_DIR/backend'); raise SystemExit(0 if importlib.util.find_spec('$normalized') else 1)"
+
+  if env "PYTHONPATH=$ROOT_DIR/backend:${PYTHONPATH:+$PYTHONPATH}" \
+    "$PYTHON_BIN" -c "$check_cmd" >/dev/null 2>&1; then
+    echo "$normalized"
+    return 0
+  fi
+
+  return 1
+}
+
+run_uvicorn() {
+  local module="$1"
+  cd "$ROOT_DIR/backend"
+  exec env "PYTHONPATH=$ROOT_DIR/backend:${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PYTHON_BIN" -m uvicorn "${module}:app" --reload --host "$BACKEND_HOST" --port "$BACKEND_PORT"
+}
+
+start_backend() {
+  IFS="," read -r -a modules <<< "$BACKEND_APP_MODULES"
+
+  for candidate in "${modules[@]}"; do
+    local normalized
+    normalized="$(verify_backend_module "$candidate" || true)"
+    if [[ -n "$normalized" ]]; then
+      echo "Starting backend with module: $normalized"
+      run_uvicorn "$normalized"
+      return 0
+    fi
+  done
+
+  echo "Error: No valid backend module found. Checked: $BACKEND_APP_MODULES" >&2
+  return 1
+}
+
 trap cleanup EXIT INT TERM
 
 echo "Starting backend on http://${BACKEND_HOST}:${BACKEND_PORT}"
 (
-  cd "$ROOT_DIR/backend"
-  exec "$PYTHON_BIN" -m uvicorn app.main:app --reload --host "$BACKEND_HOST" --port "$BACKEND_PORT"
+  start_backend
 ) &
 BACKEND_PID=$!
+
+echo "Waiting for backend to become ready..."
+if ! wait_for_backend; then
+  echo "Error: backend did not become ready on http://${BACKEND_HOST}:${BACKEND_PORT} within ${BACKEND_READY_TIMEOUT_SECONDS}s." >&2
+  exit 1
+fi
 
 echo "Starting frontend on http://${FRONTEND_HOST}:${FRONTEND_PORT}"
 (

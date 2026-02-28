@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from functools import lru_cache
 
-import toml
+import tomllib
 import yaml
 from jinja2 import Environment, BaseLoader
 
@@ -23,8 +23,8 @@ class PromptManager:
     def _load_system_instructions(self) -> dict:
         if self._system_cache is not None and self._is_prod:
             return self._system_cache
-        with open(_SYSTEM_INSTRUCTION_PATH, "r", encoding="utf-8") as f:
-            self._system_cache = toml.load(f)
+        with open(_SYSTEM_INSTRUCTION_PATH, "rb") as f:
+            self._system_cache = tomllib.load(f)
         return self._system_cache
 
     def get_system_instruction(self, key: str) -> str:

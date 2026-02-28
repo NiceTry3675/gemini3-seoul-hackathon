@@ -1,145 +1,276 @@
+import { FRAME_SEQUENCE } from '../data/workflowData';
 import type {
-  PipelineWorkflowAction,
-  PipelineWorkflowState,
+  AppWorkflowState,
+  FrameSelection,
+  StoryInputMode,
+  WorkflowAction,
+  WorkflowStep,
 } from '../types/workflow';
 
-function createInitialProcessingState(): PipelineWorkflowState['processing'] {
-  return {
-    running: false,
-    errorMessage: null,
-    runId: null,
-    progressByStep: {},
-  };
+function createInitialFrames(): FrameSelection[] {
+  return FRAME_SEQUENCE.map((label, index) => ({
+    frameIndex: index + 1,
+    sequenceLabel: label,
+    status: index === 0 ? 'active' : 'locked',
+    selectedOptionId: null,
+    options: [],
+    generation: 0,
+  }));
 }
 
-export function createInitialWorkflowState(): PipelineWorkflowState {
+function recomputeFrameStatuses(frameSelections: FrameSelection[]): FrameSelection[] {
+  let unlockNext = true;
+
+  return frameSelections.map((selection) => {
+    if (!unlockNext) {
+      return { ...selection, status: 'locked' };
+    }
+
+    if (selection.selectedOptionId) {
+      return { ...selection, status: 'complete' };
+    }
+
+    unlockNext = false;
+    return { ...selection, status: 'active' };
+  });
+}
+
+function isMetaPromptValid(state: AppWorkflowState): boolean {
+  return state.metaPrompt.draft.trim().length > 0;
+}
+
+function hasStyleSelection(state: AppWorkflowState): boolean {
+  return state.selectedStyle !== null;
+}
+
+function hasAllFrameSelections(state: AppWorkflowState): boolean {
+  return state.frameSelections.length > 0 && state.frameSelections.every((frame) => frame.selectedOptionId !== null);
+}
+
+export function canAdvanceFromStep(state: AppWorkflowState): boolean {
+  switch (state.step) {
+    case 'story_input':
+      return true;
+    case 'meta_prompt_1':
+      return isMetaPromptValid(state);
+    case 'meta_prompt_2':
+      return hasStyleSelection(state);
+    case 'meta_prompt_3':
+      return hasAllFrameSelections(state);
+    default:
+      return false;
+  }
+}
+
+export function createInitialWorkflowState(): AppWorkflowState {
   return {
     step: 'story_input',
     storyInput: {
-      manuscript: '',
-      genre: '',
-      tone: '',
-      outputLanguage: 'ko',
-      styleTemplate: 'webtoon_cel',
+      text: '',
+      inputMode: 'original',
+      charCount: 0,
     },
-    processing: createInitialProcessingState(),
-    result: null,
+    metaPrompt: {
+      draft: '',
+      history: [],
+    },
+    selectedStyle: null,
+    frameSelections: createInitialFrames(),
+    processing: {
+      running: false,
+      errorMessage: null,
+    },
+    videoExport: null,
   };
 }
 
-export function canStartPipeline(state: PipelineWorkflowState): boolean {
-  return (
-    state.storyInput.manuscript.trim().length > 0
-    && state.storyInput.genre.trim().length > 0
-    && state.storyInput.tone.trim().length > 0
-  );
+function applyBackStep(current: WorkflowStep): WorkflowStep {
+  switch (current) {
+    case 'meta_prompt_1':
+      return 'story_input';
+    case 'meta_prompt_2':
+      return 'meta_prompt_1';
+    case 'meta_prompt_3':
+      return 'meta_prompt_2';
+    case 'processing_state':
+      return 'meta_prompt_3';
+    case 'video_export':
+      return 'meta_prompt_3';
+    default:
+      return current;
+  }
 }
 
 export function workflowReducer(
-  state: PipelineWorkflowState,
-  action: PipelineWorkflowAction,
-): PipelineWorkflowState {
+  state: AppWorkflowState,
+  action: WorkflowAction,
+): AppWorkflowState {
   switch (action.type) {
-    case 'SET_MANUSCRIPT':
+    case 'SET_STORY_TEXT': {
+      const text = action.payload;
       return {
         ...state,
         storyInput: {
           ...state.storyInput,
-          manuscript: action.payload,
+          text,
+          charCount: text.length,
+        },
+      };
+    }
+
+    case 'SET_STORY_INPUT_MODE':
+      return {
+        ...state,
+        storyInput: {
+          ...state.storyInput,
+          inputMode: action.payload as StoryInputMode,
         },
       };
 
-    case 'SET_GENRE':
+    case 'SET_META_DRAFT':
       return {
         ...state,
-        storyInput: {
-          ...state.storyInput,
-          genre: action.payload,
+        metaPrompt: {
+          ...state.metaPrompt,
+          draft: action.payload,
         },
       };
 
-    case 'SET_TONE':
+    case 'PUSH_META_HISTORY':
       return {
         ...state,
-        storyInput: {
-          ...state.storyInput,
-          tone: action.payload,
+        metaPrompt: {
+          ...state.metaPrompt,
+          history: [action.payload, ...state.metaPrompt.history].slice(0, 8),
         },
       };
 
-    case 'SET_OUTPUT_LANGUAGE':
-      return {
-        ...state,
-        storyInput: {
-          ...state.storyInput,
-          outputLanguage: action.payload,
-        },
-      };
+    case 'APPLY_STYLE': {
+      const frames: FrameSelection[] = state.frameSelections.map((frame, frameIdx) => ({
+        ...frame,
+        status: frameIdx === 0 ? ('active' as const) : ('locked' as const),
+        selectedOptionId: null,
+        options: action.payload.frameOptions[frameIdx] ?? [],
+        generation: 0,
+      }));
 
-    case 'SET_STYLE_TEMPLATE':
       return {
         ...state,
-        storyInput: {
-          ...state.storyInput,
-          styleTemplate: action.payload,
-        },
+        selectedStyle: action.payload.style,
+        frameSelections: frames,
+        videoExport: null,
+      };
+    }
+
+    case 'SELECT_FRAME_OPTION': {
+      const next = state.frameSelections.map((frame) => {
+        if (frame.frameIndex !== action.payload.frameIndex) {
+          return frame;
+        }
+        if (frame.status === 'locked') {
+          return frame;
+        }
+        return {
+          ...frame,
+          selectedOptionId: action.payload.optionId,
+        };
+      });
+
+      return {
+        ...state,
+        frameSelections: recomputeFrameStatuses(next),
+      };
+    }
+
+    case 'REGENERATE_FRAME_OPTIONS': {
+      const next: FrameSelection[] = state.frameSelections.map((frame) => {
+        if (frame.frameIndex < action.payload.frameIndex) {
+          return frame;
+        }
+
+        if (frame.frameIndex === action.payload.frameIndex) {
+          return {
+            ...frame,
+            options: action.payload.options,
+            selectedOptionId: null,
+            generation: frame.generation + 1,
+          };
+        }
+
+        return {
+          ...frame,
+          selectedOptionId: null,
+          status: 'locked' as const,
+        };
+      });
+
+      return {
+        ...state,
+        frameSelections: recomputeFrameStatuses(next),
+      };
+    }
+
+    case 'NEXT': {
+      if (state.step === 'story_input') {
+        return { ...state, step: 'meta_prompt_1' };
+      }
+      if (state.step === 'meta_prompt_1' && isMetaPromptValid(state)) {
+        return { ...state, step: 'meta_prompt_2' };
+      }
+      if (state.step === 'meta_prompt_2' && hasStyleSelection(state)) {
+        return { ...state, step: 'meta_prompt_3' };
+      }
+      return state;
+    }
+
+    case 'BACK':
+      return {
+        ...state,
+        step: applyBackStep(state.step),
+        processing:
+          state.step === 'processing_state'
+            ? { ...state.processing, running: false }
+            : state.processing,
       };
 
     case 'START_PROCESSING':
-      if (!canStartPipeline(state)) {
+      if (state.selectedStyle === null) {
         return state;
       }
       return {
         ...state,
-        step: 'processing_state',
-        result: null,
+        step: 'meta_prompt_3',
         processing: {
-          ...createInitialProcessingState(),
           running: true,
-        },
-      };
-
-    case 'SET_RUN_ID':
-      return {
-        ...state,
-        processing: {
-          ...state.processing,
-          runId: action.payload,
-          running: true,
-        },
-      };
-
-    case 'UPDATE_PROGRESS':
-      return {
-        ...state,
-        processing: {
-          ...state.processing,
-          running: action.payload.status === 'running',
-          progressByStep: {
-            ...state.processing.progressByStep,
-            [action.payload.step]: action.payload,
-          },
+          errorMessage: null,
         },
       };
 
     case 'PROCESSING_SUCCESS':
       return {
         ...state,
-        step: 'result',
-        result: action.payload,
+        step: 'meta_prompt_3',
+        videoExport: action.payload,
         processing: {
-          ...state.processing,
           running: false,
           errorMessage: null,
         },
       };
 
+    case 'GO_VIDEO_EXPORT':
+      if (!state.videoExport) {
+        return state;
+      }
+      return {
+        ...state,
+        step: 'video_export',
+      };
+
     case 'PROCESSING_ERROR':
       return {
         ...state,
-        step: 'processing_state',
+        step: 'meta_prompt_3',
         processing: {
-          ...state.processing,
           running: false,
           errorMessage: action.payload,
         },
@@ -154,14 +285,10 @@ export function workflowReducer(
         },
       };
 
-    case 'BACK_TO_INPUT':
+    case 'JUMP_TO_STEP':
       return {
         ...state,
-        step: 'story_input',
-        processing: {
-          ...state.processing,
-          running: false,
-        },
+        step: action.payload,
       };
 
     case 'RESET':

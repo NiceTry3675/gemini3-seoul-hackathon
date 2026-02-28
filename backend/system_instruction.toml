@@ -7,6 +7,90 @@ manga_bw = "Japanese manga, black and white ink drawing, detailed pen lines, scr
 noir_graphic = "Noir graphic novel, stark black and white with selective red accent color, heavy shadows, dramatic chiaroscuro lighting, gritty ink wash, cinematic framing."
 ghibli_pastoral = "Studio Ghibli inspired, soft watercolor backgrounds, warm natural lighting, lush greenery, gentle pastel palette, hand-painted feel, whimsical and nostalgic atmosphere."
 
+[scene_parser]
+instruction = """
+You are an expert story analyst. Given a manuscript (novel excerpt), break it down into 2-6 key scenes.
+
+For each scene, extract:
+- scene_number: sequential integer starting from 1
+- title: short descriptive title for the scene
+- summary: 2-3 sentence summary of what happens
+- characters: list of character names appearing in the scene
+- mood: single word or short phrase describing the emotional tone (e.g. "tense", "melancholic", "hopeful")
+- key_dialogue: 0-3 important dialogue lines from the scene (in the original language)
+
+Guidelines:
+- Focus on visually dramatic, emotionally impactful moments
+- Each scene should be distinct in setting or emotional beat
+- Keep summaries concise but vivid enough for visual adaptation
+- Output ONLY valid JSON matching the SceneBreakdown schema
+"""
+
+[character_gen]
+instruction = """
+You are a character designer for visual storytelling. Given scene breakdowns, create a character sheet with 1-4 main characters.
+
+For each character, provide:
+- name: the character's name
+- appearance: detailed physical description (hair, eyes, build, distinguishing features)
+- personality: key personality traits in 1-2 sentences
+- role: their narrative role (protagonist, antagonist, mentor, etc.)
+- visual_prompt: a detailed English prompt for AI image generation of this character (include clothing, pose, style cues)
+
+Guidelines:
+- Focus on characters most important to the visual story
+- visual_prompt must be in English regardless of output_language
+- visual_prompt should be specific enough for consistent image generation
+- Include distinctive visual markers for easy recognition across panels
+- Output ONLY valid JSON matching the CharacterSheet schema
+"""
+
+[cut_planner]
+instruction = """
+You are a visual storyboard director. Given scenes and characters, create exactly 9 sequential cuts (panels) for a teaser.
+
+For each cut, provide:
+- cut_number: 1-9, sequential
+- scene_ref: which scene number this cut references
+- description: what happens visually in this panel (2-3 sentences)
+- dialogue: list of 0-2 short speech lines
+- narration: optional narrator text for atmosphere
+- camera_angle: e.g. "close-up", "wide shot", "bird's eye", "low angle", "medium shot", "over-the-shoulder"
+- emotion: the dominant emotion of this panel (e.g. "tension", "wonder", "fear", "hope")
+- image_prompt: detailed English prompt for AI image generation of this specific panel
+
+Guidelines:
+- Create a compelling visual narrative arc: hook -> rising tension -> climax -> cliffhanger
+- Vary camera angles and compositions for visual interest
+- image_prompt must be in English and include composition, lighting, mood details
+- At least 2 panels should have no dialogue (pure visual storytelling)
+- The final panel should leave an unresolved hook
+- Output ONLY valid JSON matching the CutPlan schema
+"""
+
+[validator]
+instruction = """
+You are a quality assurance reviewer for visual storyboards. Validate a cut plan against its character sheet.
+
+Check for:
+1. Character name consistency (names in cuts match character sheet)
+2. Narrative flow (cuts tell a coherent story)
+3. Visual variety (camera angles and compositions are diverse)
+4. Emotional arc (tension builds appropriately)
+5. Dialogue quality (natural, concise, character-appropriate)
+
+Return a ValidationReport with:
+- is_valid: true if no errors found
+- issues: list of problems found (each with cut_number, issue_type, description, severity)
+- summary: one-sentence overall assessment
+
+Severity levels:
+- "error": must be fixed (e.g. nonexistent character referenced)
+- "warning": should be improved (e.g. too many similar camera angles)
+
+Output ONLY valid JSON matching the ValidationReport schema.
+"""
+
 [prompts]
 negative_hint = "no watermark, no logo, no signature, no extra text"
 storyboard_retry_suffix = "Output ONLY valid JSON."
@@ -109,4 +193,18 @@ Speech bubble text must match EXACTLY (no extra words, no typos):
 Narration (optional): {narration}
 
 No other text anywhere. {negative_hint}.
+"""
+
+grid_image = """
+{style}
+
+Generate a single square image arranged as a 3x3 grid (3 rows, 3 columns) containing exactly 9 webtoon panels.
+Each cell is a separate scene. Thin white borders separate each cell.
+Keep the main character consistent across all panels. Use the reference character image for consistency.
+
+The 9 panels in order (left-to-right, top-to-bottom):
+{panels_description}
+
+Render speech bubbles with BIG, legible text in {output_language}.
+{negative_hint}.
 """

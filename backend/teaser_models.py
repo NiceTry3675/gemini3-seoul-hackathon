@@ -60,7 +60,7 @@ class TeaserRequest(BaseModel):
     max_image_cuts: int = Field(default=9, ge=1, le=9)
 
     # Allow overrides for experiments without editing code.
-    text_model: str = "gemini-3.1-pro-preview"
+    text_model: str = "gemini-3-flash-preview"
     image_model: str = "gemini-3.1-flash-image-preview"
 
 

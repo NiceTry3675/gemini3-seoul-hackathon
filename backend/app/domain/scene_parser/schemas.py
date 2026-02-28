@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 
 class NovelInput(BaseModel):
     manuscript: str = Field(..., max_length=200_000)
-    genre: str
-    tone: str
+    genre: str = ""
+    tone: str = ""
     output_language: str = Field(default="ko")
 
 

@@ -17,7 +17,8 @@ from google.genai import types
 from PIL import Image
 from pydantic import ValidationError
 
-from .teaser_models import (
+from app.config import settings
+from teaser_models import (
     PromptPreviewCut,
     PromptPreviewResult,
     TeaserCut,
@@ -25,8 +26,9 @@ from .teaser_models import (
     TeaserRequest,
     TeaserResult,
 )
-from .teaser_prompts import (
+from teaser_prompts import (
     build_anchor_image_prompt,
+    build_grid_image_prompt,
     build_panel_image_prompt,
     build_storyboard_user_prompt,
     get_storyboard_retry_suffix,
@@ -43,9 +45,11 @@ def _ensure_api_key() -> None:
 
 def make_client() -> genai.Client:
     _ensure_api_key()
-    # Keep default client transport options; manual timeout settings can be
-    # translated into too-short server deadlines in some environments.
-    return genai.Client()
+    # Use the configured request timeout for long preview generation calls.
+    http_options = types.HttpOptions(timeout=settings.GENAI_REQUEST_TIMEOUT_SECONDS)
+    return genai.Client(
+        http_options=http_options,
+    )
 
 
 def _is_transient_network_error(exc: Exception) -> bool:
@@ -261,6 +265,22 @@ def _generate_image(
     raise RuntimeError(f"Image generation failed after {max_attempts} attempts: {last_err}")
 
 
+def _split_grid_image(png_bytes: bytes, rows: int = 3, cols: int = 3) -> list[bytes]:
+    """Split a grid image into individual cell PNGs (left-to-right, top-to-bottom)."""
+    pil_img = Image.open(io.BytesIO(png_bytes))
+    w, h = pil_img.size
+    cell_w = w // cols
+    cell_h = h // rows
+    cells: list[bytes] = []
+    for r in range(rows):
+        for c in range(cols):
+            cell = pil_img.crop((c * cell_w, r * cell_h, (c + 1) * cell_w, (r + 1) * cell_h))
+            buf = io.BytesIO()
+            cell.save(buf, format="PNG")
+            cells.append(buf.getvalue())
+    return cells
+
+
 def run_teaser(client: genai.Client, req: TeaserRequest) -> TeaserResult:
     plan = generate_plan(client, req)
     output_dir = _create_output_dir()
@@ -279,29 +299,30 @@ def run_teaser(client: genai.Client, req: TeaserRequest) -> TeaserResult:
     (output_dir / "anchor.png").write_bytes(anchor_png)
     anchor_b64 = base64.b64encode(anchor_png).decode("ascii")
 
-    # 2) Panels: sequential with references.
+    # 2) Generate all 9 panels as a single 3x3 grid image, then split.
+    grid_prompt = build_grid_image_prompt(plan)
+    (output_dir / "grid_prompt.txt").write_text(grid_prompt, encoding="utf-8")
+
+    grid_img = _generate_image(
+        client,
+        model=req.image_model,
+        prompt=grid_prompt,
+        references=[anchor_img.ref_part],
+    )
+    grid_png = _image_to_png_bytes(grid_img)
+    (output_dir / "grid.png").write_bytes(grid_png)
+
+    cell_pngs = _split_grid_image(grid_png, rows=3, cols=3)
+
     cuts: list[TeaserCut] = []
-    prev_img: GeneratedImage | None = None
-    target_panels = sorted(plan.panels, key=lambda p: p.index)[: req.max_image_cuts]
-    for panel in target_panels:
-        panel_prompt = build_panel_image_prompt(plan, panel)
-
-        if panel.index == 1:
-            refs = [anchor_img.ref_part]
-        else:
-            # MVP rule: anchor + previous panel for cuts 2..9.
-            refs = [anchor_img.ref_part, prev_img.ref_part] if prev_img is not None else [anchor_img.ref_part]
-
-        img = _generate_image(
-            client,
-            model=req.image_model,
-            prompt=panel_prompt,
-            references=refs,
-        )
-        prev_img = img
-        cut_png = _image_to_png_bytes(img)
-        (output_dir / f"cut_{panel.index:02d}.png").write_bytes(cut_png)
-        cuts.append(TeaserCut(index=panel.index, image_base64=base64.b64encode(cut_png).decode("ascii")))
+    target_count = min(req.max_image_cuts, len(cell_pngs))
+    for i in range(target_count):
+        panel_index = i + 1
+        (output_dir / f"cut_{panel_index:02d}.png").write_bytes(cell_pngs[i])
+        cuts.append(TeaserCut(
+            index=panel_index,
+            image_base64=base64.b64encode(cell_pngs[i]).decode("ascii"),
+        ))
 
     return TeaserResult(plan=plan, character_anchor_image_base64=anchor_b64, cuts=cuts)
 

@@ -10,6 +10,7 @@ from google import genai
 from app.exceptions import GeminiAPIError, QuotaExceededError, SafetyBlockError
 from app.prompt_manager import get_prompt_manager
 from app.shared.client import get_genai_client
+from app.domain.conti.genre_extractor import extract_genre_tone
 from app.domain.scene_parser.schemas import NovelInput
 from app.domain.scene_parser.service import SceneParserService
 from app.domain.character_gen.schemas import CharacterGenRequest
@@ -117,24 +118,39 @@ class ContiOrchestratorService:
         return "", ""
 
     async def generate(self, request: ContiRequest) -> AsyncGenerator[dict, None]:
+        # Step 0: Auto-extract genre & tone from manuscript
+        genre = request.genre
+        tone = request.tone
+        if not genre or not tone:
+            yield self._progress_event(1, "genre_tone_extract", "running")
+            try:
+                extracted = await extract_genre_tone(self._client, request.manuscript)
+                genre = genre or extracted["genre"]
+                tone = tone or extracted["tone"]
+            except Exception as exc:
+                logger.warning("Genre/tone extraction failed: %s; using defaults.", exc)
+                genre = genre or "general"
+                tone = tone or "neutral"
+            yield self._progress_event(1, "genre_tone_extract", "completed", f"genre={genre}, tone={tone}")
+
         novel_input = NovelInput(
             manuscript=request.manuscript,
-            genre=request.genre,
-            tone=request.tone,
+            genre=genre,
+            tone=tone,
             output_language=request.output_language,
         )
 
-        # Step 1: Scene parsing
-        yield self._progress_event(1, "scene_parse", "running")
+        # Step 2: Scene parsing
+        yield self._progress_event(2, "scene_parse", "running")
         try:
             scene_breakdown = await self._scene_parser.parse(novel_input)
         except Exception as exc:
-            yield self._progress_event(1, "scene_parse", "failed", str(exc))
+            yield self._progress_event(2, "scene_parse", "failed", str(exc))
             return
-        yield self._progress_event(1, "scene_parse", "completed", f"{len(scene_breakdown.scenes)} scenes parsed")
+        yield self._progress_event(2, "scene_parse", "completed", f"{len(scene_breakdown.scenes)} scenes parsed")
 
-        # Step 2: Character generation
-        yield self._progress_event(2, "character_gen", "running")
+        # Step 3: Character generation
+        yield self._progress_event(3, "character_gen", "running")
         reference_images: dict[str, str] = {}
         try:
             char_req = CharacterGenRequest(novel_input=novel_input, scene_breakdown=scene_breakdown)
@@ -142,12 +158,12 @@ class ContiOrchestratorService:
             character_sheet = char_resp.character_sheet
             reference_images = char_resp.reference_images
         except Exception as exc:
-            yield self._progress_event(2, "character_gen", "failed", str(exc))
+            yield self._progress_event(3, "character_gen", "failed", str(exc))
             return
-        yield self._progress_event(2, "character_gen", "completed", f"{len(character_sheet.characters)} characters generated")
+        yield self._progress_event(3, "character_gen", "completed", f"{len(character_sheet.characters)} characters generated")
 
-        # Step 3: Cut planning
-        yield self._progress_event(3, "cut_plan", "running")
+        # Step 4: Cut planning
+        yield self._progress_event(4, "cut_plan", "running")
         try:
             cut_req = CutPlanRequest(
                 novel_input=novel_input,
@@ -156,12 +172,12 @@ class ContiOrchestratorService:
             )
             cut_plan = await self._cut_planner.plan(cut_req)
         except Exception as exc:
-            yield self._progress_event(3, "cut_plan", "failed", str(exc))
+            yield self._progress_event(4, "cut_plan", "failed", str(exc))
             return
-        yield self._progress_event(3, "cut_plan", "completed", f"{len(cut_plan.cuts)} cuts planned")
+        yield self._progress_event(4, "cut_plan", "completed", f"{len(cut_plan.cuts)} cuts planned")
 
-        # Step 4: Validation (with one retry of cut_plan if invalid)
-        yield self._progress_event(4, "validate", "running")
+        # Step 5: Validation (with one retry of cut_plan if invalid)
+        yield self._progress_event(5, "validate", "running")
         validation_report: ValidationReport | None = None
         try:
             val_req = ValidationRequest(cut_plan=cut_plan, character_sheet=character_sheet)
@@ -176,25 +192,25 @@ class ContiOrchestratorService:
                     validation_report = await self._validator.validate(val_req2)
                     if not validation_report.is_valid:
                         logger.warning("Validation still failed after retry; proceeding with warning.")
-                        yield self._progress_event(4, "validate", "completed", "validation warnings: " + validation_report.summary)
+                        yield self._progress_event(5, "validate", "completed", "validation warnings: " + validation_report.summary)
                     else:
-                        yield self._progress_event(4, "validate", "completed", "validated after retry")
+                        yield self._progress_event(5, "validate", "completed", "validated after retry")
                 except Exception as retry_exc:
                     logger.warning("Cut plan retry failed: %s; proceeding anyway.", retry_exc)
-                    yield self._progress_event(4, "validate", "completed", "retry failed; proceeding with original plan")
+                    yield self._progress_event(5, "validate", "completed", "retry failed; proceeding with original plan")
             else:
-                yield self._progress_event(4, "validate", "completed", validation_report.summary)
+                yield self._progress_event(5, "validate", "completed", validation_report.summary)
         except (QuotaExceededError, SafetyBlockError):
             raise
         except Exception as exc:
             logger.warning("Validation step failed: %s; proceeding without validation.", exc)
-            yield self._progress_event(4, "validate", "completed", "validation skipped due to error")
+            yield self._progress_event(5, "validate", "completed", "validation skipped due to error")
 
-        # Step 5: Media generation — sequential with anchor + prev_panel ref chaining
+        # Step 6: Media generation — sequential with anchor + prev_panel ref chaining
         output_mode = request.output_mode
         style_template = request.style_template
         media_label = "media" if output_mode != "image" else "images"
-        yield self._progress_event(5, "media_gen", "running", f"generating {len(cut_plan.cuts)} {media_label}")
+        yield self._progress_event(6, "media_gen", "running", f"generating {len(cut_plan.cuts)} {media_label}")
         generated_cuts: list[GeneratedCut] = []
         cuts = sorted(cut_plan.cuts, key=lambda c: c.cut_number)
 
@@ -249,11 +265,11 @@ class ContiOrchestratorService:
             ))
 
             yield self._progress_event(
-                5, "media_gen", "running",
+                6, "media_gen", "running",
                 f"generated {i + 1}/{len(cuts)} {media_label}",
             )
 
-        yield self._progress_event(5, "media_gen", "completed", f"{len(generated_cuts)} {media_label} generated")
+        yield self._progress_event(6, "media_gen", "completed", f"{len(generated_cuts)} {media_label} generated")
 
         # Final result
         result = ContiResult(
@@ -308,10 +324,17 @@ class ContiOrchestratorService:
 
     async def preview(self, request: ContiRequest) -> PromptPreviewResult:
         """Run steps 1-3 (parse, character gen, cut plan) and return styled prompts without generating images."""
+        genre = request.genre
+        tone = request.tone
+        if not genre or not tone:
+            extracted = await extract_genre_tone(self._client, request.manuscript)
+            genre = genre or extracted["genre"]
+            tone = tone or extracted["tone"]
+
         novel_input = NovelInput(
             manuscript=request.manuscript,
-            genre=request.genre,
-            tone=request.tone,
+            genre=genre,
+            tone=tone,
             output_language=request.output_language,
         )
 

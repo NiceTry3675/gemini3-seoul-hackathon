@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 import tomllib
 
-from .teaser_models import Panel, TeaserPlan, TeaserRequest
+from teaser_models import Panel, TeaserPlan, TeaserRequest
 
 _CONFIG_PATH = Path(__file__).with_name("system_instruction.toml")
 
@@ -89,6 +89,30 @@ def _bubble_lines(panel: Panel) -> str:
     if not bubbles:
         return "No speech bubbles."
     return "\n".join([f"\"{b}\"" for b in bubbles])
+
+
+def build_grid_image_prompt(plan: TeaserPlan) -> str:
+    """Build a single prompt for a 3x3 grid image containing all 9 panels."""
+    style = style_prompt(plan.style_template)
+    negative_hint = _prompt_value("negative_hint")
+
+    panels_lines: list[str] = []
+    for panel in sorted(plan.panels, key=lambda p: p.index):
+        bubbles = _bubble_lines(panel)
+        narration = (panel.narration or "").strip() or "None"
+        panels_lines.append(
+            f"Panel {panel.index}: {panel.visual.strip()} "
+            f"| Speech: {bubbles} | Narration: {narration}"
+        )
+
+    panels_description = "\n".join(panels_lines)
+    template = _prompt_value("grid_image")
+    return template.format(
+        style=style,
+        panels_description=panels_description,
+        output_language=plan.output_language,
+        negative_hint=negative_hint,
+    )
 
 
 def build_panel_image_prompt(plan: TeaserPlan, panel: Panel) -> str:

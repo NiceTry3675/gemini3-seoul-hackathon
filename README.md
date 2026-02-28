@@ -1,1 +1,1 @@
-# gemini3-seoul-hackathon
+# Teaser-Studio

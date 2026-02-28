@@ -65,7 +65,7 @@ Notes:
 - `/api/teaser` is sequential (`anchor + cuts`) so full 9 cuts can take time.
 - For smoke tests, use a smaller `max_image_cuts` (for example 1~3).
 - Generated images are saved under `outputs/teaser_<timestamp>_<id>/`
-  with files: `anchor.png`, `cut_01.png...`, and `plan.json`.
+  with files: `plan.json`, `anchor_prompt.txt`, `anchor.png`, and `cut_01.png...`.
 - If you see SSL timeout errors (for example `_ssl.c:983: The handshake operation timed out`),
   retry once and check outbound network/proxy settings. The backend now retries transient network failures.
 - Do not set very short request deadlines; Gemini Developer API rejects deadlines under 10 seconds.

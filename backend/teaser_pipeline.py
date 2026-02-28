@@ -267,6 +267,7 @@ def run_teaser(client: genai.Client, req: TeaserRequest) -> TeaserResult:
 
     # 1) Character anchor image
     anchor_prompt = build_anchor_image_prompt(plan)
+    (output_dir / "anchor_prompt.txt").write_text(anchor_prompt, encoding="utf-8")
     anchor_img = _generate_image(
         client,
         model=req.image_model,

@@ -78,6 +78,14 @@ interface CompatTeaserResponse {
   }>;
 }
 
+interface CompatTeaserTranslateResponse {
+  translated_to_language: PipelineOutputLanguage;
+  cuts: Array<{
+    index: number;
+    image_base64: string;
+  }>;
+}
+
 function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (typeof configured !== 'string') {
@@ -282,6 +290,7 @@ export async function generateMediaFromPreview(
   sourceText: string,
   preview: PipelinePreviewModel,
   styleTemplate: PipelineStyleTemplate,
+  outputLanguage: PipelineOutputLanguage,
   referenceImages: Record<string, string>,
   promptOverrides: Record<number, string>,
   signal: AbortSignal,
@@ -293,7 +302,7 @@ export async function generateMediaFromPreview(
     },
     body: JSON.stringify({
       source_text: sourceText,
-      output_language: 'ko',
+      output_language: outputLanguage,
       style_template: styleTemplate,
       reference_images: referenceImages,
       prompt_overrides: promptOverrides,
@@ -334,6 +343,50 @@ export async function generateMediaFromPreview(
     cuts: mappedCuts,
     validation_report: null,
     reference_images: nextRefs,
+  };
+}
+
+export async function translateResultCuts(
+  sourceResult: PipelineResultModel,
+  sourceLanguage: PipelineOutputLanguage,
+  targetLanguage: PipelineOutputLanguage,
+  signal: AbortSignal,
+): Promise<PipelineResultModel> {
+  const response = await fetch(`${getApiBaseUrl()}/api/teaser/translate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_language: sourceLanguage,
+      target_language: targetLanguage,
+      cuts: sourceResult.cuts.map((cut) => ({
+        index: cut.cut_number,
+        image_base64: cut.image_base64,
+        mime_type: cut.mime_type || 'image/png',
+        dialogue: cut.dialogue,
+        narration: cut.narration,
+        description: cut.description,
+      })),
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseHttpError(response));
+  }
+
+  const payload = await response.json() as CompatTeaserTranslateResponse;
+  const translatedByCut = new Map(payload.cuts.map((cut) => [cut.index, cut.image_base64]));
+
+  const translatedCuts = sourceResult.cuts.map((cut) => ({
+    ...cut,
+    image_base64: translatedByCut.get(cut.cut_number) ?? cut.image_base64,
+  }));
+
+  return {
+    ...sourceResult,
+    cuts: translatedCuts,
   };
 }
 

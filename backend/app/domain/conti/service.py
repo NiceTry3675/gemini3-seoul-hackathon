@@ -36,6 +36,11 @@ from app.domain.conti.schemas import (
 logger = logging.getLogger(__name__)
 
 _IMAGE_MAX_RETRIES = 3
+_LANGUAGE_LABELS = {
+    "ko": "Korean",
+    "en": "English",
+    "ja": "Japanese",
+}
 
 
 class ContiOrchestratorService:
@@ -71,6 +76,33 @@ class ContiOrchestratorService:
         if negative:
             parts.append(negative)
         return "\n\n".join(parts)
+
+    def _language_label(self, code: str) -> str:
+        return _LANGUAGE_LABELS.get(code, code)
+
+    def _build_translation_prompt(
+        self,
+        *,
+        source_language: str,
+        target_language: str,
+        dialogue: list[str],
+        narration: str,
+    ) -> str:
+        source_label = self._language_label(source_language)
+        target_label = self._language_label(target_language)
+        dialogue_text = " / ".join([d.strip() for d in dialogue if d.strip()]) or "(none)"
+        narration_text = narration.strip() or "(none)"
+        return (
+            "You will receive one reference webtoon panel image.\n"
+            "Keep the composition, characters, color palette, camera angle, and background as close as possible.\n"
+            f"Translate ONLY the visible on-image text from {source_label} to {target_label}.\n"
+            "Do not add or remove bubbles/captions. Do not add any extra text.\n"
+            "If there is no visible text, return the same panel unchanged.\n\n"
+            "Known script text likely present in the panel:\n"
+            f"- Dialogue: {dialogue_text}\n"
+            f"- Narration: {narration_text}\n\n"
+            "Return IMAGE only."
+        )
 
     def _sse_event(self, event: str, data: dict) -> dict:
         return {"event": event, "data": json.dumps(data, ensure_ascii=False)}
@@ -115,6 +147,36 @@ class ContiOrchestratorService:
                 if attempt < _IMAGE_MAX_RETRIES:
                     await asyncio.sleep(1.0)
         return "", ""
+
+    async def translate_cut_text_only(
+        self,
+        *,
+        image_base64: str,
+        mime_type: str,
+        source_language: str,
+        target_language: str,
+        cut_number: int,
+        dialogue: list[str],
+        narration: str,
+    ) -> tuple[str, str, str, bool]:
+        """Returns (image_base64, mime_type, prompt_used, used_fallback_original)."""
+        prompt = self._build_translation_prompt(
+            source_language=source_language,
+            target_language=target_language,
+            dialogue=dialogue,
+            narration=narration,
+        )
+        if not image_base64:
+            return "", mime_type, prompt, True
+
+        translated_b64, translated_mime = await self._generate_image_with_retry(
+            prompt,
+            cut_number,
+            {"original_panel": image_base64},
+        )
+        if translated_b64:
+            return translated_b64, translated_mime, prompt, False
+        return image_base64, mime_type, prompt, True
 
     async def generate(self, request: ContiRequest) -> AsyncGenerator[dict, None]:
         novel_input = NovelInput(

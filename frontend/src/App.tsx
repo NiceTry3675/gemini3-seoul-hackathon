@@ -10,9 +10,16 @@ import {
   generateMediaFromPreview,
   generateReferenceImages,
   mapVisualStyleToPipelineTemplate,
+  translateResultCuts,
 } from './services/workflowService';
 import { createInitialWorkflowState, workflowReducer } from './state/workflowReducer';
-import type { PipelinePreviewModel, VisualStyleId, WorkflowStep } from './types/workflow';
+import type {
+  PipelineOutputLanguage,
+  PipelinePreviewModel,
+  PipelineResultModel,
+  VisualStyleId,
+  WorkflowStep,
+} from './types/workflow';
 
 function downloadWorkflowSnapshot(snapshot: unknown): void {
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
@@ -36,6 +43,10 @@ function normalizeError(error: unknown): string {
   return 'Unknown pipeline error.';
 }
 
+function defaultTranslationTarget(source: PipelineOutputLanguage): PipelineOutputLanguage {
+  return source === 'ko' ? 'en' : 'ko';
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(workflowReducer, undefined, createInitialWorkflowState);
   const [previewData, setPreviewData] = useState<PipelinePreviewModel | null>(null);
@@ -44,6 +55,10 @@ export default function App() {
   const [metaPreviewError, setMetaPreviewError] = useState<string | null>(null);
   const [referenceLoading, setReferenceLoading] = useState(false);
   const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [resultTranslationLanguage, setResultTranslationLanguage] = useState<PipelineOutputLanguage>('en');
+  const [resultTranslationLoading, setResultTranslationLoading] = useState(false);
+  const [resultTranslationError, setResultTranslationError] = useState<string | null>(null);
+  const [baseResultForTranslation, setBaseResultForTranslation] = useState<PipelineResultModel | null>(null);
   const [referenceImages, setReferenceImages] = useState<
     Partial<Record<VisualStyleId, { imageBase64: string; mimeType: string }>>
   >({});
@@ -73,7 +88,7 @@ export default function App() {
       {
         manuscript: state.storyInput.text,
         styleTemplate,
-        outputLanguage: 'ko',
+        outputLanguage: state.storyInput.outputLanguage,
       },
       abortController.signal,
     )
@@ -101,6 +116,7 @@ export default function App() {
   }, [
     state.step,
     state.storyInput.text,
+    state.storyInput.outputLanguage,
     state.metaPrompt.draft,
     state.selectedStyle,
   ]);
@@ -222,11 +238,15 @@ export default function App() {
       state.storyInput.text,
       previewData,
       mapVisualStyleToPipelineTemplate(state.selectedStyle),
+      state.storyInput.outputLanguage,
       mergedReferences,
       promptOverrides,
       abortController.signal,
     )
       .then((result) => {
+        setBaseResultForTranslation(result);
+        setResultTranslationLanguage(defaultTranslationTarget(state.storyInput.outputLanguage));
+        setResultTranslationError(null);
         dispatch({
           type: 'UPDATE_PROGRESS',
           payload: { step: 5, step_name: 'media_gen', status: 'completed', detail: `${result.cuts.length} images generated` },
@@ -248,6 +268,7 @@ export default function App() {
     state.processing.running,
     state.selectedStyle,
     state.storyInput.text,
+    state.storyInput.outputLanguage,
     previewData,
     referenceImages,
     editableCutPrompts,
@@ -261,6 +282,9 @@ export default function App() {
 
   const startProcessing = () => {
     dispatch({ type: 'CLEAR_PROCESSING_ERROR' });
+    setResultTranslationError(null);
+    setResultTranslationLoading(false);
+    setBaseResultForTranslation(null);
     dispatch({ type: 'START_PROCESSING' });
   };
 
@@ -271,6 +295,9 @@ export default function App() {
     setEditableCutPrompts({});
     setReferenceImages({});
     setReferenceError(null);
+    setResultTranslationLanguage(defaultTranslationTarget(state.storyInput.outputLanguage));
+    setResultTranslationError(null);
+    setBaseResultForTranslation(null);
     dispatch({ type: 'NEXT' });
   };
 
@@ -310,8 +337,10 @@ export default function App() {
             text={state.storyInput.text}
             inputMode={state.storyInput.inputMode}
             charCount={state.storyInput.charCount}
+            outputLanguage={state.storyInput.outputLanguage}
             onTextChange={(value) => dispatch({ type: 'SET_STORY_TEXT', payload: value })}
             onInputModeChange={(mode) => dispatch({ type: 'SET_STORY_INPUT_MODE', payload: mode })}
+            onOutputLanguageChange={(value) => dispatch({ type: 'SET_OUTPUT_LANGUAGE', payload: value })}
             onNext={handleStoryNext}
           />
         );
@@ -382,7 +411,12 @@ export default function App() {
               }
               setEditableCutPrompts(next);
             }}
-            onStartOver={() => dispatch({ type: 'RESET' })}
+            onStartOver={() => {
+              setResultTranslationLanguage(defaultTranslationTarget(state.storyInput.outputLanguage));
+              setResultTranslationError(null);
+              setBaseResultForTranslation(null);
+              dispatch({ type: 'RESET' });
+            }}
             onGenerateTeaser={startProcessing}
             onBack={goBack}
           />
@@ -406,6 +440,33 @@ export default function App() {
             result={state.result}
             onBack={goBack}
             onDownload={handleDownload}
+            translationLanguage={resultTranslationLanguage}
+            translationLoading={resultTranslationLoading}
+            translationError={resultTranslationError}
+            onTranslationLanguageChange={setResultTranslationLanguage}
+            onRegenerateTranslation={async () => {
+              const sourceResult = baseResultForTranslation ?? state.result;
+              if (!sourceResult) return;
+
+              setResultTranslationLoading(true);
+              setResultTranslationError(null);
+              try {
+                if (resultTranslationLanguage === state.storyInput.outputLanguage) {
+                  throw new Error('Source language and target language are the same.');
+                }
+                const translated = await translateResultCuts(
+                  sourceResult,
+                  state.storyInput.outputLanguage,
+                  resultTranslationLanguage,
+                  new AbortController().signal,
+                );
+                dispatch({ type: 'PROCESSING_SUCCESS', payload: translated });
+              } catch (error: unknown) {
+                setResultTranslationError(normalizeError(error));
+              } finally {
+                setResultTranslationLoading(false);
+              }
+            }}
           />
         ) : (
           <ProcessingStateScreen

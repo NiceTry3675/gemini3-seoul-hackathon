@@ -1,9 +1,14 @@
-import type { PipelineResultModel } from '../../types/workflow';
+import type { PipelineOutputLanguage, PipelineResultModel } from '../../types/workflow';
 
 interface VideoExportScreenProps {
   result: PipelineResultModel;
   onBack: () => void;
   onDownload: () => void;
+  translationLanguage: PipelineOutputLanguage;
+  translationLoading: boolean;
+  translationError: string | null;
+  onTranslationLanguageChange: (value: PipelineOutputLanguage) => void;
+  onRegenerateTranslation: () => void;
 }
 
 function toDataUrl(mimeType: string, base64: string): string {
@@ -14,6 +19,11 @@ export default function VideoExportScreen({
   result,
   onBack,
   onDownload,
+  translationLanguage,
+  translationLoading,
+  translationError,
+  onTranslationLanguageChange,
+  onRegenerateTranslation,
 }: VideoExportScreenProps) {
   const cuts = [...result.cuts].sort((a, b) => a.cut_number - b.cut_number);
 
@@ -45,6 +55,43 @@ export default function VideoExportScreen({
               </article>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-[#101a30] p-5">
+          <h2 className="text-lg font-semibold">Image Text Translation</h2>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="flex gap-2">
+              {(['ko', 'en', 'ja'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => onTranslationLanguageChange(lang)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold uppercase ${
+                    translationLanguage === lang
+                      ? 'bg-[#2b6cee] text-white'
+                      : 'border border-slate-600 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={onRegenerateTranslation}
+              disabled={translationLoading}
+              className="rounded-md bg-[#2b6cee] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {translationLoading ? 'Regenerating...' : `Regenerate (${translationLanguage})`}
+            </button>
+          </div>
+          {translationError ? (
+            <p className="mt-2 text-sm text-red-300">{translationError}</p>
+          ) : (
+            <p className="mt-2 text-xs text-slate-400">
+              최종 생성 완료 후 현재 결과 이미지를 기준으로 글자만 번역 재생성합니다.
+            </p>
+          )}
         </section>
 
         <section className="space-y-4">

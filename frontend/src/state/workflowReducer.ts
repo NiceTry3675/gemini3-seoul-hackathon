@@ -76,6 +76,7 @@ export function createInitialWorkflowState(): AppWorkflowState {
       text: '',
       inputMode: 'original',
       charCount: 0,
+      outputLanguage: 'ko',
     },
     metaPrompt: {
       draft: '',
@@ -111,6 +112,15 @@ export function workflowReducer(
         storyInput: {
           ...state.storyInput,
           inputMode: action.payload as StoryInputMode,
+        },
+      };
+
+    case 'SET_OUTPUT_LANGUAGE':
+      return {
+        ...state,
+        storyInput: {
+          ...state.storyInput,
+          outputLanguage: action.payload,
         },
       };
 

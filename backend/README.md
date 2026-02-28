@@ -60,6 +60,40 @@ curl -X POST http://127.0.0.1:8000/api/pipeline/preview \
   }'
 ```
 
+Teaser export API (compat route used by frontend export step):
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/teaser \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source_text": "여기에 소설 초반 텍스트를 넣으세요",
+    "output_language": "ko",
+    "style_template": "webtoon_cel",
+    "max_image_cuts": 9
+  }'
+```
+
+Teaser translation API (used after final images are generated):
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/teaser/translate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source_language": "ko",
+    "target_language": "en",
+    "cuts": [
+      {
+        "index": 1,
+        "image_base64": "<base64>",
+        "mime_type": "image/png",
+        "dialogue": ["대사"],
+        "narration": "내레이션",
+        "description": "컷 설명"
+      }
+    ]
+  }'
+```
+
 Run history APIs:
 
 ```bash
@@ -70,6 +104,13 @@ curl http://127.0.0.1:8000/api/pipeline/runs/<run_id>
 Notes:
 
 - `/api/pipeline/generate` is sequential (`anchor + cuts`) so full 9 cuts can take time.
+- `/api/teaser` writes export artifacts to `outputs/export_*`:
+  - `request.json`, `plan.json`
+  - `prompts/anchor_prompt.txt`, `prompts/cut_XX.raw.txt`, `prompts/cut_XX.styled.txt`
+  - `images/original/*.png`
+  - `images/translated_<lang>/*.png` (only when translation runs)
+  - `manifest.json` (translation/fallback summary)
+- `/api/teaser/translate` also writes translation artifacts to `outputs/export_*`.
 - Prompt templates and system instructions are managed in `backend/system_instruction.toml`.
 - If you see SSL timeout errors (for example `_ssl.c:983: The handshake operation timed out`),
   retry once and check outbound network/proxy settings. The backend now retries transient network failures.

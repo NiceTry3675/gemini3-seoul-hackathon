@@ -2,14 +2,16 @@ import StepProgress from '../layout/StepProgress';
 import TopNav from '../layout/TopNav';
 import Button from '../ui/Button';
 import { STORY_NAV_LINKS, STORY_PLACEHOLDER } from '../../data/workflowData';
-import type { StoryInputMode } from '../../types/workflow';
+import type { PipelineOutputLanguage, StoryInputMode } from '../../types/workflow';
 
 interface StoryInputScreenProps {
   text: string;
   inputMode: StoryInputMode;
   charCount: number;
+  outputLanguage: PipelineOutputLanguage;
   onTextChange: (value: string) => void;
   onInputModeChange: (mode: StoryInputMode) => void;
+  onOutputLanguageChange: (value: PipelineOutputLanguage) => void;
   onNext: () => void;
 }
 
@@ -17,8 +19,10 @@ export default function StoryInputScreen({
   text,
   inputMode,
   charCount,
+  outputLanguage,
   onTextChange,
   onInputModeChange,
+  onOutputLanguageChange,
   onNext,
 }: StoryInputScreenProps) {
   return (
@@ -42,33 +46,55 @@ export default function StoryInputScreen({
           </div>
 
           <section className="overflow-hidden rounded-2xl border border-ts-border bg-ts-panel/70">
-            <div className="flex items-center justify-between border-b border-ts-border px-6 py-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                <span className="material-symbols-outlined text-base">description</span>
-                <span>Input Mode</span>
+            <div className="space-y-3 border-b border-ts-border px-6 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                  <span className="material-symbols-outlined text-base">description</span>
+                  <span>Input Mode</span>
+                </div>
+
+                <div className="rounded-lg border border-ts-border bg-ts-nav p-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => onInputModeChange('summary')}
+                    className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'summary'
+                      ? 'bg-ts-primary text-white'
+                      : 'text-ts-text-muted hover:text-ts-text'
+                      }`}
+                  >
+                    Summary
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onInputModeChange('original')}
+                    className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'original'
+                      ? 'bg-ts-primary text-white'
+                      : 'text-ts-text-muted hover:text-ts-text'
+                      }`}
+                  >
+                    Original
+                  </button>
+                </div>
               </div>
 
-              <div className="rounded-lg border border-ts-border bg-ts-nav p-1 text-sm">
-                <button
-                  type="button"
-                  onClick={() => onInputModeChange('summary')}
-                  className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'summary'
-                    ? 'bg-ts-primary text-white'
-                    : 'text-ts-text-muted hover:text-ts-text'
-                    }`}
-                >
-                  Summary
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onInputModeChange('original')}
-                  className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'original'
-                    ? 'bg-ts-primary text-white'
-                    : 'text-ts-text-muted hover:text-ts-text'
-                    }`}
-                >
-                  Original
-                </button>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-200">Output Language</div>
+                <div className="rounded-lg border border-ts-border bg-ts-nav p-1 text-sm">
+                  {(['ko', 'en', 'ja'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => onOutputLanguageChange(lang)}
+                      className={`rounded px-3 py-1.5 uppercase transition-colors ${
+                        outputLanguage === lang
+                          ? 'bg-ts-primary text-white'
+                          : 'text-ts-text-muted hover:text-ts-text'
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

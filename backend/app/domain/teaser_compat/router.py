@@ -12,6 +12,11 @@ from app.domain.character_gen.schemas import Character, CharacterSheet
 from app.domain.conti.schemas import ContiRequest, GenerateMediaRequest
 from app.domain.conti.service import ContiOrchestratorService
 from app.domain.cut_planner.schemas import Cut, CutPlan
+from app.domain.teaser_compat.export_artifacts import (
+    ImageSnapshot,
+    PromptSnapshot,
+    save_export_artifacts,
+)
 from app.domain.teaser_compat.schemas import (
     MainCharacterCompat,
     PanelCompat,
@@ -21,6 +26,8 @@ from app.domain.teaser_compat.schemas import (
     TeaserCompatResponse,
     TeaserCutCompat,
     TeaserPlanCompat,
+    TeaserTranslateRequest,
+    TeaserTranslateResponse,
 )
 
 router = APIRouter(tags=["teaser-compat"])
@@ -218,14 +225,123 @@ async def generate_teaser(
         )
     )
 
+    plan = _to_plan(request, updated_cut_plan, preview.anchor_prompt, preview.characters)
+    sorted_media_cuts = sorted(media.cuts, key=lambda c: c.cut_number)[:request.max_image_cuts]
+
     cuts = [
         TeaserCutCompat(index=cut.cut_number, image_base64=cut.image_base64)
-        for cut in sorted(media.cuts, key=lambda c: c.cut_number)[:request.max_image_cuts]
+        for cut in sorted_media_cuts
     ]
 
-    plan = _to_plan(request, updated_cut_plan, preview.anchor_prompt, preview.characters)
+    prompt_snapshots = [
+        PromptSnapshot(
+            cut_number=cut.cut_number,
+            raw_prompt=cut.image_prompt,
+            styled_prompt=service._build_styled_prompt(cut.image_prompt, request.style_template),
+        )
+        for cut in sorted(updated_cut_plan.cuts, key=lambda c: c.cut_number)[:request.max_image_cuts]
+    ]
+    original_snapshots = [
+        ImageSnapshot(
+            cut_number=cut.cut_number,
+            image_base64=cut.image_base64,
+            mime_type=cut.mime_type,
+        )
+        for cut in sorted_media_cuts
+    ]
+
+    export_run_id = None
+    try:
+        export_run_id = save_export_artifacts(
+            request_payload=request.model_dump(),
+            plan_payload=plan.model_dump(),
+            anchor_prompt=preview.anchor_prompt,
+            anchor_image_base64=anchor_b64,
+            prompt_snapshots=prompt_snapshots,
+            original_images=original_snapshots,
+        )
+    except Exception as exc:
+        logger.warning("Failed to save export artifacts: %s", exc)
+
     return TeaserCompatResponse(
         plan=plan,
         character_anchor_image_base64=anchor_b64,
         cuts=cuts,
+        translated_to_language=None,
+        export_run_id=export_run_id,
+    )
+
+
+@router.post("/api/teaser/translate", response_model=TeaserTranslateResponse)
+async def translate_teaser_images(
+    request: TeaserTranslateRequest,
+    service: ContiOrchestratorService = Depends(_get_service),
+) -> TeaserTranslateResponse:
+    source_cuts = sorted(request.cuts, key=lambda c: c.index)
+    translated_cuts: list[TeaserCutCompat] = []
+    translated_snapshots: list[ImageSnapshot] = []
+    original_snapshots: list[ImageSnapshot] = []
+    prompt_snapshots: list[PromptSnapshot] = []
+    translation_records: list[dict] = []
+
+    for cut in source_cuts:
+        translated_b64, translated_mime, prompt_used, used_fallback = await service.translate_cut_text_only(
+            image_base64=cut.image_base64,
+            mime_type=cut.mime_type,
+            source_language=request.source_language,
+            target_language=request.target_language,
+            cut_number=cut.index,
+            dialogue=cut.dialogue,
+            narration=cut.narration,
+        )
+        translated_cuts.append(TeaserCutCompat(index=cut.index, image_base64=translated_b64))
+        original_snapshots.append(
+            ImageSnapshot(
+                cut_number=cut.index,
+                image_base64=cut.image_base64,
+                mime_type=cut.mime_type,
+            )
+        )
+        translated_snapshots.append(
+            ImageSnapshot(
+                cut_number=cut.index,
+                image_base64=translated_b64,
+                mime_type=translated_mime,
+            )
+        )
+        prompt_snapshots.append(
+            PromptSnapshot(
+                cut_number=cut.index,
+                raw_prompt=prompt_used,
+                styled_prompt=prompt_used,
+            )
+        )
+        translation_records.append(
+            {
+                "cut_number": cut.index,
+                "used_fallback_original": used_fallback,
+                "translation_prompt": prompt_used,
+            }
+        )
+
+    export_run_id = None
+    try:
+        export_run_id = save_export_artifacts(
+            request_payload=request.model_dump(),
+            plan_payload={"title": "Teaser Translation"},
+            anchor_prompt="",
+            anchor_image_base64="",
+            prompt_snapshots=prompt_snapshots,
+            original_images=original_snapshots,
+            translated_language=request.target_language,
+            translated_images=translated_snapshots,
+            translation_records=translation_records,
+        )
+    except Exception as exc:
+        logger.warning("Failed to save translation artifacts: %s", exc)
+
+    return TeaserTranslateResponse(
+        translated_to_language=request.target_language,
+        cuts=translated_cuts,
+        export_run_id=export_run_id,
     )

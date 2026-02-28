@@ -12,6 +12,7 @@ export interface StoryInputModel {
   text: string;
   inputMode: StoryInputMode;
   charCount: number;
+  outputLanguage: PipelineOutputLanguage;
 }
 
 export interface MetaPromptModel {
@@ -155,6 +156,7 @@ export interface AppWorkflowState {
 export type WorkflowAction =
   | { type: 'SET_STORY_TEXT'; payload: string }
   | { type: 'SET_STORY_INPUT_MODE'; payload: StoryInputMode }
+  | { type: 'SET_OUTPUT_LANGUAGE'; payload: PipelineOutputLanguage }
   | { type: 'SET_META_DRAFT'; payload: string }
   | { type: 'PUSH_META_HISTORY'; payload: string }
   | {

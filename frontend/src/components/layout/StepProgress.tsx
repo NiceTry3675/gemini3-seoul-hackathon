@@ -3,6 +3,7 @@ interface StepProgressProps {
   nextLabel?: string;
   labels: string[];
   currentIndex: number;
+  className?: string;
 }
 
 export default function StepProgress({
@@ -10,12 +11,13 @@ export default function StepProgress({
   nextLabel,
   labels,
   currentIndex,
+  className,
 }: StepProgressProps) {
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className={`mx-auto flex w-full max-w-[980px] flex-col gap-2.5 ${className ?? ''}`}>
       <div className="flex items-end justify-between">
-        <span className="text-sm font-bold uppercase tracking-wider text-[#2b6cee]">{stepLabel}</span>
-        {nextLabel ? <span className="text-sm text-slate-400">{nextLabel}</span> : null}
+        <span className="text-sm font-bold uppercase tracking-wider text-ts-primary">{stepLabel}</span>
+        {nextLabel ? <span className="text-sm text-ts-text-muted">{nextLabel}</span> : null}
       </div>
 
       <div className="flex w-full gap-1">
@@ -24,7 +26,7 @@ export default function StepProgress({
           return (
             <div
               key={label}
-              className={`h-2 flex-1 rounded-full ${active ? 'bg-[#2b6cee]' : 'bg-slate-800'}`}
+              className={`h-2 flex-1 rounded-full ${active ? 'bg-ts-primary' : 'bg-slate-800'}`}
               aria-hidden="true"
             />
           );
@@ -36,7 +38,7 @@ export default function StepProgress({
           <span
             key={label}
             className={
-              index < currentIndex ? 'text-[#2b6cee]' : 'text-slate-500'
+              index < currentIndex ? 'text-ts-primary' : 'text-ts-text-subtle'
             }
           >
             {label}

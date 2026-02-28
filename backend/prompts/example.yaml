@@ -1,0 +1,9 @@
+name: example
+description: An example prompt template
+template: |
+  Please analyze the following content:
+
+  Topic: {{ topic }}
+  Context: {{ context }}
+
+  Provide a detailed analysis.

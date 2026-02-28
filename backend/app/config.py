@@ -1,9 +1,14 @@
-import os
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
-load_dotenv()
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+class Settings(BaseSettings):
+    GOOGLE_API_KEY: str
+    TEXT_MODEL: str = "gemini-3.1-pro-preview"
+    IMAGE_MODEL: str = "gemini-3.1-flash-image-preview"
+    VIDEO_MODEL: str = "veo-3.1-generate-preview"
+    DEBUG: bool = False
 
-GEMINI_TEXT_MODEL = "gemini-2.5-flash-preview-05-20"
-GEMINI_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
+    model_config = {"env_file": "../.env", "env_file_encoding": "utf-8"}
+
+
+settings = Settings()

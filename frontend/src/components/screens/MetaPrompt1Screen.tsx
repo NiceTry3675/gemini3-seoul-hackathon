@@ -26,7 +26,7 @@ export default function MetaPrompt1Screen({
     <div className="min-h-screen">
       <TopNav links={PRIMARY_NAV_LINKS} />
 
-      <main className="mx-auto flex w-full max-w-[1100px] flex-col px-6 py-10 lg:px-12">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 py-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 2 OF 4"
           nextLabel="Next: Choose Visual Style"
@@ -34,7 +34,7 @@ export default function MetaPrompt1Screen({
           currentIndex={2}
         />
 
-        <section className="mx-auto mt-10 w-full max-w-3xl space-y-8">
+        <section className="mx-auto mt-10 w-full max-w-[980px] space-y-8">
           <div className="space-y-2">
             <h2 className="text-5xl font-black tracking-tight text-slate-50">Refine Meta Prompt</h2>
             <p className="text-lg text-slate-400">

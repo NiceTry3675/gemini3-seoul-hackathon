@@ -35,10 +35,10 @@ export default function StoryInputScreen({
             </Button>
           </div>
         }
-        innerClassName="max-w-[1200px] px-6 lg:px-8"
+        innerClassName="max-w-[1200px] px-6 lg:px-10"
       />
 
-      <main className="mx-auto flex w-full max-w-[980px] flex-col px-6 pb-16 pt-14 lg:px-12">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-16 pt-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 1 OF 4"
           nextLabel="Next: Meta Prompt"
@@ -46,7 +46,7 @@ export default function StoryInputScreen({
           currentIndex={1}
         />
 
-        <div className="mx-auto mt-11 w-full max-w-[760px]">
+        <div className="mx-auto mt-10 w-full max-w-[980px]">
           <div className="mb-10 text-center">
             <h2 className="text-5xl font-black tracking-tight text-slate-50">Tell your story</h2>
             <p className="mx-auto mt-4 max-w-[560px] text-xl text-slate-400">

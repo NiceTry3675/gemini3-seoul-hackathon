@@ -44,7 +44,7 @@ export default function BottomActionBar({
   secondaryAction,
   primaryAction,
   hint,
-  innerClassName = 'max-w-[1100px] px-6 lg:px-10',
+  innerClassName = 'max-w-[1200px] px-6 lg:px-10',
 }: BottomActionBarProps) {
   return (
     <footer className="sticky bottom-0 z-10 border-t border-ts-border/80 bg-ts-nav/90 py-4 backdrop-blur-md">

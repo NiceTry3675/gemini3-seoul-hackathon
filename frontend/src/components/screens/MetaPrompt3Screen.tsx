@@ -35,17 +35,17 @@ export default function MetaPrompt3Screen({
 
   return (
     <div className="min-h-screen">
-      <TopNav links={PRIMARY_NAV_LINKS} innerClassName="max-w-[1320px] px-6 lg:px-10" />
+      <TopNav links={PRIMARY_NAV_LINKS} />
 
-      <main className="mx-auto flex w-full max-w-[1320px] flex-col px-6 py-10 lg:px-10">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 py-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 4 OF 4"
           nextLabel="In Progress"
-          labels={['Story', 'Meta', 'Visuals', 'Generation']}
+          labels={['Story', 'Meta', 'Visuals', 'Export']}
           currentIndex={4}
         />
 
-        <section className="mt-8 space-y-8">
+        <section className="mx-auto mt-10 w-full max-w-[980px] space-y-8">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <h2 className="text-5xl font-black tracking-tight text-slate-50">
@@ -184,7 +184,6 @@ export default function MetaPrompt3Screen({
           emphasis: 'primary',
         }}
         hint="Select at least Frame 01 to start rendering"
-        innerClassName="max-w-[1320px] px-6 lg:px-10"
       />
 
       <button

@@ -18,7 +18,7 @@ def _get_service(client: genai.Client = Depends(get_genai_client)) -> GeminiText
 
 
 @router.post("/generate", response_model=TextGenerationResponse)
-async def generate_text(
+def generate_text(
     request: TextGenerationRequest,
     service: GeminiTextService = Depends(_get_service),
 ):
@@ -26,7 +26,7 @@ async def generate_text(
 
 
 @router.post("/structured")
-async def generate_structured(
+def generate_structured(
     request: StructuredGenerationRequest,
     service: GeminiTextService = Depends(_get_service),
 ):

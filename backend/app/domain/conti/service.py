@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 
 from google import genai
 
-from app.exceptions import GeminiAPIError
+from app.exceptions import GeminiAPIError, QuotaExceededError, SafetyBlockError
 from app.shared.client import get_genai_client
 from app.domain.scene_parser.schemas import NovelInput
 from app.domain.scene_parser.service import SceneParserService
@@ -131,6 +131,8 @@ class ContiOrchestratorService:
                     yield self._progress_event(4, "validate", "completed", "retry failed; proceeding with original plan")
             else:
                 yield self._progress_event(4, "validate", "completed", validation_report.summary)
+        except (QuotaExceededError, SafetyBlockError):
+            raise
         except Exception as exc:
             logger.warning("Validation step failed: %s; proceeding without validation.", exc)
             yield self._progress_event(4, "validate", "completed", "validation skipped due to error")

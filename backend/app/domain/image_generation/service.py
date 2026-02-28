@@ -50,7 +50,11 @@ class GeminiImageService:
             )
 
             # Extract image from response
+            if not response.candidates:
+                raise GeminiAPIError("No candidates returned from Gemini API")
             candidate = response.candidates[0]
+            if not candidate.content or not candidate.content.parts:
+                raise GeminiAPIError("Empty response from Gemini API")
             image_part = None
             for part in candidate.content.parts:
                 if part.inline_data is not None:

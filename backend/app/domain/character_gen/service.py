@@ -81,7 +81,11 @@ class CharacterGenService:
                 contents=visual_prompt,
                 config=config,
             )
+            if not response.candidates:
+                return None
             candidate = response.candidates[0]
+            if not candidate.content or not candidate.content.parts:
+                return None
             for part in candidate.content.parts:
                 if part.inline_data is not None:
                     return part_to_base64(part)

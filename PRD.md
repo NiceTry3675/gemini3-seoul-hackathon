@@ -2,7 +2,7 @@
 
 > **행사**: Google Gemini 3 Seoul Hackathon (2026-02-28)
 > **팀 규모**: 4
-> **목표**: 소설 원고(최대 2,000자)를 입력하면 12컷 웹툰 컨티(이미지 + 대사 + 내레이션)를 자동으로 생성하는 웹앱
+> **목표**: 소설 원고(최대 200,000자)를 입력하면 12컷 웹툰 컨티(이미지 + 대사 + 내레이션)를 자동으로 생성하는 웹앱
 
 ---
 
@@ -34,55 +34,12 @@
 | 프론트엔드 프레임워크 | Next.js 16 + React 19 + Tailwind CSS 4  | 빠른 초기 세팅, 현대적 스택, 강력한 타입 지원               |
 | 컷 수              | 고정 12컷                                 | 데모 시 일관된 웹툰 포맷, 구현 범위 관리                     |
 | 상태 관리          | 인메모리 dict (서버 사이드)                | 해커톤 범위이므로 DB 불필요                                  |
-| 통신 방식          | SSE (Server-Sent Events)                  | 양방향이 아닌 단방향 진행 스트림에 간단한 구현
- |
+| 통신 방식          | SSE (Server-Sent Events)                  | 양방향이 아닌 단방향 진행 스트림에 간단한 구현 |
 
 ---
 
 ## 2. 아키텍처
-
-### 2.1 디렉터리 구조
-
-```
-gemini3-seoul-hackathon/
-├── backend/
-│   ├── run.py                      # Uvicorn 진입점
-│   ├── requirements.txt
-│   └── app/
-│       ├── __init__.py
-│       ├── main.py                 # FastAPI 앱 + API 4개 엔드포인트
-│       ├── config.py               # 환경변수, 모델 ID
-│       ├── models/
-│       │   ├── __init__.py
-│       │   ├── schemas.py          # Pydantic 모델(공유 계약)
-│       │   └── prompts.py          # 시스템 프롬프트 + 템플릿
-│       └── pipeline/
-│           ├── __init__.py
-│           ├── gemini.py           # Gemini API 래퍼 (텍스트 + 이미지)
-│           ├── scene_parser.py     # Step 1: 소설 → 장면
-│           ├── character_gen.py    # Step 2: 장면 → 캐릭터 + 참조 이미지
-│           ├── cut_planner.py      # Step 3: 장면 + 캐릭터 → 12컷 계획
-│           ├── validator.py        # Step 4: 품질 검증
-│           ├── image_gen.py        # Step 5: 컷 → 이미지
-│           └── orchestrator.py     # 파이프라인 오케스트레이터 + SSE 발행
-├── frontend/
-│   ├── package.json                # Next.js 16 + React 19 + Tailwind 4
-│   ├── next.config.ts
-│   ├── tsconfig.json
-│   └── src/
-│       ├── app/
-│       │   ├── layout.tsx          # 루트 레이아웃 (Geist 폰트)
-│       │   ├── page.tsx            # 메인 페이지 (TBD: 추가 구현)
-│       │   └── globals.css         # Tailwind 기본 스타일
-│       └── lib/
-│           ├── types.ts            # schemas.py와 대응되는 TypeScript 타입
-│           └── api.ts              # API 클라이언트(fetch + EventSource)
-├── .env.example                    # GOOGLE_API_KEY=...
-├── .gitignore
-└── PRD.md                          # 이 문서
-```
-
-### 2.2 기술 스택
+### 2.1 기술 스택
 
 | 계층              | 기술         | 버전  |
 | ------------------ | ------------ | ----- |
@@ -97,12 +54,12 @@ gemini3-seoul-hackathon/
 | CSS               | Tailwind CSS | 4.x   |
 | 언어              | TypeScript   | 5.x   |
 
-### 2.3 데이터 흐름 (5단계 파이프라인)
+### 2.2 데이터 흐름 (5단계 파이프라인)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        사용자 입력                                  │
-│  manuscript(≤2000자) + 장르 + 톤 + 연령등급 + 언어                 │
+│  manuscript(≤200000자) + 장르 + 톤 + 언어               │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
                                  ▼
@@ -142,7 +99,7 @@ gemini3-seoul-hackathon/
                                  ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │  STEP 5: 이미지 생성                                                  │
-│  Input:  CutPlan + CharacterSheet + 톤 + 연령등급                      │
+│  Input:  CutPlan + CharacterSheet + 톤                                 │
 │  Output: list[GeneratedCut] (12장 base64)                             │
 │  Model:  gemini-3.1-flash-image-preview                                                │
 │  Strategy: 3개씩 배치, 배치 간 2초 지연, 컷당 최대 3회 재시도          │
@@ -159,9 +116,9 @@ gemini3-seoul-hackathon/
 ---
 
 
-## 4. AI 파이프라인 상세
+## 3. AI 파이프라인 상세
 
-### 4.1 Step 1 — 장면 분해
+### 3.1 Step 1 — 장면 분해
 
 | 항목        | 상세                                                                          |
 | ----------- | ----------------------------------------------------------------------------- |
@@ -172,9 +129,9 @@ gemini3-seoul-hackathon/
 | 온도        | 1.0 (기본값)                                                                  |
 | 시스템 프롬프트 | `SCENE_PARSER_SYSTEM` — 소설을 시각적으로 구분되는 장면으로 분해하도록 지시   |
 
-**프롬프트 전략**: 시스템 프롬프트는 역할(웹툰 스토리보드 작가)을 정의한다. 사용자 프롬프트에 장르, 톤, 연령등급, 원고 텍스트를 전달한다. `{output_language}` 플레이스홀더는 시스템 프롬프트에 주입된다.
+**프롬프트 전략**: 시스템 프롬프트는 역할(웹툰 스토리보드 작가)을 정의한다. 사용자 프롬프트에 장르, 톤, 원고 텍스트를 전달한다. `{output_language}` 플레이스홀더는 시스템 프롬프트에 주입된다.
 
-### 4.2 Step 2 — 캐릭터 생성
+### 3.2 Step 2 — 캐릭터 생성
 
 | 항목        | 상세                                                          |
 | ----------- | ------------------------------------------------------------- |
@@ -183,4 +140,3 @@ gemini3-seoul-hackathon/
 | 입력        | `SceneBreakdown` + `NovelInput`                               |
 | 출력        | `CharacterSheet` + 참조 이미지(dict[name → base64])             |
 | 하위 단계   | 2a: 캐릭터 데이터 생성, 2b: 참조 이미지 생성                   |
-

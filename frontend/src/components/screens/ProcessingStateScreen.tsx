@@ -1,8 +1,11 @@
 import TopNav from '../layout/TopNav';
 import { PROCESSING_NAV_LINKS } from '../../data/workflowData';
+import type { PipelineProgressEvent } from '../../types/workflow';
 
 interface ProcessingStateScreenProps {
   running: boolean;
+  runId: string | null;
+  progressByStep: Record<number, PipelineProgressEvent>;
   errorMessage: string | null;
   onRetry: () => void;
   onBack: () => void;
@@ -10,11 +13,14 @@ interface ProcessingStateScreenProps {
 
 export default function ProcessingStateScreen({
   running,
+  runId,
+  progressByStep,
   errorMessage,
   onRetry,
   onBack,
 }: ProcessingStateScreenProps) {
   const showError = Boolean(errorMessage);
+  const steps = Object.values(progressByStep).sort((a, b) => a.step - b.step);
 
   return (
     <div className="min-h-screen overflow-hidden">
@@ -26,7 +32,7 @@ export default function ProcessingStateScreen({
         </div>
 
         {!showError ? (
-          <section className="relative z-10 flex max-w-md flex-col items-center gap-8 text-center">
+          <section className="relative z-10 flex w-full max-w-md flex-col items-center gap-8 text-center">
             <div className="relative">
               <div className="size-16 rounded-full border-4 border-slate-800" />
               <div className="absolute inset-0 size-16 animate-spin rounded-full border-4 border-[#2b6cee] border-t-transparent" />
@@ -41,13 +47,36 @@ export default function ProcessingStateScreen({
                 Our AI is analyzing your inputs and crafting the perfect teaser. This might take a few
                 seconds.
               </p>
+              {runId ? (
+                <p className="text-xs text-slate-600">Run ID: {runId}</p>
+              ) : null}
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="size-2 rounded-full bg-[#2b6cee]" />
-              <div className="size-2 rounded-full bg-[#2b6cee]/60" />
-              <div className="size-2 rounded-full bg-[#2b6cee]/30" />
-            </div>
+            {steps.length > 0 ? (
+              <ul className="w-full space-y-2 text-left">
+                {steps.map((evt) => (
+                  <li key={evt.step} className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
+                    {evt.status === 'completed' ? (
+                      <span className="material-symbols-outlined text-base text-emerald-400">check_circle</span>
+                    ) : evt.status === 'failed' ? (
+                      <span className="material-symbols-outlined text-base text-red-400">error</span>
+                    ) : (
+                      <span className="material-symbols-outlined animate-spin text-base text-[#2b6cee]">progress_activity</span>
+                    )}
+                    <span className="flex-1 text-sm text-slate-300">{evt.step_name}</span>
+                    {evt.detail ? (
+                      <span className="text-xs text-slate-500">{evt.detail}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="size-2 rounded-full bg-[#2b6cee]" />
+                <div className="size-2 rounded-full bg-[#2b6cee]/60" />
+                <div className="size-2 rounded-full bg-[#2b6cee]/30" />
+              </div>
+            )}
 
             {!running ? (
               <button

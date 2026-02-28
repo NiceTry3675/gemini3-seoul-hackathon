@@ -2,17 +2,26 @@ import {
   FRAME_IMAGE_POOL,
   FRAME_SEQUENCE,
   FRAME_TAGS,
-  STYLE_OPTIONS,
   STYLE_TONE_BY_ID,
 } from '../data/workflowData';
 import type {
   FrameOption,
-  FrameSelection,
-  MockRenderPayload,
+  PipelineOutputLanguage,
+  PipelinePreviewModel,
+  PipelineProgressEvent,
+  PipelineResultModel,
+  PipelineStyleTemplate,
   SourceFrame,
+  TeaserApiResult,
   VideoExportModel,
   VisualStyleId,
 } from '../types/workflow';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000';
 
 const STYLE_SUBTITLES: Record<VisualStyleId, string[]> = {
   cinematic_realism: ['Neon Noir Style', 'Cyberpunk Style', 'Cinematic Style', 'Experimental Style'],
@@ -20,6 +29,64 @@ const STYLE_SUBTITLES: Record<VisualStyleId, string[]> = {
   watercolor_dream: ['Gallery Warmth', 'Renaissance Mood', 'Brushwork Scene', 'Canvas Grain'],
   digital_masterpaint: ['Pencil Burst', 'Charcoal Shade', 'Ink Motion', 'Storyboard Draft'],
 };
+
+const STYLE_DESCRIPTORS: Record<VisualStyleId, string> = {
+  cinematic_realism: 'photorealistic cinematic film still, dramatic lighting, 4K',
+  webtoon_cel: 'Korean webtoon cel-shaded illustration, bold outlines, vibrant colors',
+  watercolor_dream: 'delicate watercolor painting, soft washes, painterly texture',
+  digital_masterpaint: 'detailed digital matte painting, concept art, masterwork',
+};
+
+const STYLE_REFERENCE_ORDER: VisualStyleId[] = [
+  'cinematic_realism',
+  'webtoon_cel',
+  'watercolor_dream',
+  'digital_masterpaint',
+];
+
+const NEGATIVE_HINT =
+  'ugly, deformed, blurry, low quality, watermark, text, duplicate, cropped';
+
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+export interface StartPipelineRequest {
+  manuscript: string;
+  style_template: PipelineStyleTemplate;
+  output_language: PipelineOutputLanguage;
+  genre?: string;
+  tone?: string;
+}
+
+export interface GeneratedReferenceImage {
+  style: VisualStyleId;
+  imageBase64: string;
+}
+
+export interface SseHandlers {
+  onProgress: (event: PipelineProgressEvent) => void;
+  onComplete: (result: PipelineResultModel) => void;
+  onError: (message: string) => void;
+}
+
+export interface VideoGenCallbacks {
+  onProgress: (progress: number, message: string) => void;
+  onComplete: (videoBase64: string, duration: number) => void;
+  onError: (error: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Core utilities
+// ---------------------------------------------------------------------------
+
+export function getApiBaseUrl(): string {
+  const envUrl =
+    typeof import.meta !== 'undefined'
+      ? (import.meta as { env?: Record<string, string> }).env?.VITE_API_BASE_URL
+      : undefined;
+  return (envUrl || DEFAULT_API_BASE_URL).replace(/\/$/, '');
+}
 
 function hashString(input: string): number {
   let hash = 2166136261;
@@ -30,117 +97,40 @@ function hashString(input: string): number {
   return hash >>> 0;
 }
 
-function normalizeStorySnippet(text: string): string {
-  const trimmed = text.trim().replace(/\s+/g, ' ');
-  if (!trimmed) {
-    return 'A high-impact teaser concept focused on tension, motion, and emotional payoff.';
-  }
-  const words = trimmed.split(' ').slice(0, 36);
-  const body = words.join(' ');
-  return words.length < trimmed.split(' ').length ? `${body}...` : body;
+// ---------------------------------------------------------------------------
+// Error / SSE parsing helpers
+// ---------------------------------------------------------------------------
+
+function parseErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error ?? 'Unknown error');
 }
 
-const PREVIEW_REQUEST_TIMEOUT_MS = 180_000;
-const PREVIEW_PATHS = ['/api/pipeline/preview', '/api/prompt-preview'] as const;
-const DEFAULT_API_PORT = 8000;
-
-const API_BASE_LIST = (() => {
-    const hostname = typeof window === 'undefined'
-    ? '127.0.0.1'
-    : (window.location.hostname || '127.0.0.1');
-
-  return [...new Set([
-    '',
-    `http://localhost:${DEFAULT_API_PORT}`,
-    `http://${hostname}:${DEFAULT_API_PORT}`,
-    'http://127.0.0.1:8000',
-  ].filter((value): value is string => Boolean(value)))].map((value) => value.replace(/\/$/, ''));
-})();
-
-async function fetchFromApiBase(path: string, options: RequestInit = {}): Promise<Response> {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  let lastError: unknown = null;
-
-  for (const base of API_BASE_LIST) {
-    const url = base ? `${base}${normalizedPath}` : normalizedPath;
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), PREVIEW_REQUEST_TIMEOUT_MS);
-    const signal = options.signal
-      ? (typeof AbortSignal.any === 'function'
-        ? AbortSignal.any([options.signal, controller.signal])
-        : controller.signal)
-      : controller.signal;
-    try {
-      return await fetch(url, { ...options, signal });
-    } catch (error) {
-      lastError = error;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  if (lastError instanceof Error) {
-    throw lastError;
-  }
-  throw new Error('Failed to connect to API server');
-}
-
-function asConnectError(error: unknown): Error {
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return new Error(`Request timed out after ${Math.floor(PREVIEW_REQUEST_TIMEOUT_MS / 1000)} seconds.`);
-  }
-  if (error instanceof TypeError) {
-    return new Error('Failed to connect to API server. Please check backend is running and accessible.');
-  }
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error ?? 'Unknown API error'));
-}
-
-export async function buildInitialMetaPrompt(storyText: string): Promise<string> {
-  const snippet = normalizeStorySnippet(storyText);
-
-  const fallback = [
-    'Cinematic teaser composition, 8k detail, strong emotional contrast.',
-    'Establish environment scale in the opening frame with dramatic lighting and atmospheric depth.',
-    'Maintain consistent character silhouette, wardrobe cues, and facial readability across all frames.',
-    'Use camera progression: wide establishing shot -> medium action beat -> close-up emotional peak -> iconic final frame.',
-    'Color script should evolve from cool tension tones into a brighter resolution accent.',
-    `Story anchor: ${snippet}`,
-  ].join(' ');
-
+function parseJsonPayload<T>(text: string): T | null {
   try {
-    const response = await fetchFromApiBase('/api/text/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: [
-          'You are a cinematic teaser prompt engineer.',
-          'Given the following story excerpt, generate a detailed meta prompt that will guide AI image generation for a visual teaser.',
-          'The meta prompt should include: camera angles, lighting, color palette, mood, character framing, and visual progression across frames.',
-          'Write it as a single cohesive paragraph in English. Do NOT include any explanation, just the meta prompt text.',
-          '',
-          `Story excerpt:\n${snippet}`,
-        ].join('\n'),
-        temperature: 0.8,
-        max_output_tokens: 1024,
-      }),
-    });
-
-    if (!response.ok) {
-      console.warn('Meta prompt API failed, using fallback');
-      return fallback;
-    }
-
-    const data = await response.json();
-    const text = data.text?.trim();
-    return text || fallback;
-  } catch (error) {
-    console.warn('Meta prompt API error, using fallback:', asConnectError(error).message);
-    return fallback;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
   }
 }
+
+function parseSseFrame(line: string): Record<string, unknown> | null {
+  if (!line.startsWith('data: ')) return null;
+  return parseJsonPayload<Record<string, unknown>>(line.slice(6));
+}
+
+async function parseHttpError(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    return `HTTP ${response.status}: ${text}`;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Frame options
+// ---------------------------------------------------------------------------
 
 export function generateFrameOptions(frameIndex: number, style: VisualStyleId): FrameOption[] {
   const pool = FRAME_IMAGE_POOL[style];
@@ -162,246 +152,179 @@ export function generateFrameOptions(frameIndex: number, style: VisualStyleId): 
   });
 }
 
-function buildSourceFrames(style: VisualStyleId, frameSelections: FrameSelection[]): SourceFrame[] {
-  return frameSelections.map((selection) => {
-    const selected = selection.options.find(
-      (option) => option.id === selection.selectedOptionId,
-    );
-    const fallback = generateFrameOptions(selection.frameIndex, style)[0];
+// ---------------------------------------------------------------------------
+// Style template mapping
+// ---------------------------------------------------------------------------
 
-    return {
-      index: selection.frameIndex,
-      imageUrl: selected?.imageUrl ?? fallback.imageUrl,
-      selectedOptionLabel: selected?.label ?? fallback.label,
-    };
-  });
+export function mapVisualStyleToPipelineTemplate(style: VisualStyleId): PipelineStyleTemplate {
+  return style as PipelineStyleTemplate;
 }
 
-export async function startMockRender(payload: MockRenderPayload): Promise<VideoExportModel> {
-  const fingerprint = `${payload.storyText}|${payload.metaPrompt}|${payload.style}|${payload.frameSelections
-    .map((selection) => selection.selectedOptionId ?? 'none')
-    .join('|')}`;
-  const hash = hashString(fingerprint);
-  const delayMs = 3000 + (hash % 2001);
-  const shouldFail =
-    payload.storyText.toLowerCase().includes('[force-error]') ||
-    payload.metaPrompt.toLowerCase().includes('[force-error]');
+// ---------------------------------------------------------------------------
+// Reference image generation
+// ---------------------------------------------------------------------------
 
-  return new Promise<VideoExportModel>((resolve, reject) => {
-    window.setTimeout(() => {
-      if (shouldFail) {
-        reject(
-          new Error(
-            'Mock render failed. Remove [force-error] from input to simulate a successful export.',
-          ),
-        );
-        return;
-      }
-
-      const style = STYLE_OPTIONS.find((item) => item.id === payload.style);
-      const sourceFrames = buildSourceFrames(payload.style, payload.frameSelections);
-      const previewImageUrl = sourceFrames[0]?.imageUrl ?? FRAME_IMAGE_POOL[payload.style][0];
-
-      resolve({
-        title: 'Creating your Teaser',
-        subtitle: 'Your short-form video is ready for preview.',
-        previewImageUrl,
-        sourceFrames,
-        settings: {
-          musicStyle: STYLE_TONE_BY_ID[payload.style],
-          transition: 'Fade',
-          duration: '15 Seconds',
-          format: '9:16 Vertical',
-        },
-        renderSeconds: Number((delayMs / 1000).toFixed(1)),
-      });
-
-      if (!style) {
-        console.warn('Unknown style id in mock render payload');
-      }
-    }, delayMs);
-  });
+function buildReferencePrompt(style: VisualStyleId, characterVisualPrompt: string): string {
+  const descriptor = STYLE_DESCRIPTORS[style];
+  return [
+    descriptor,
+    characterVisualPrompt,
+    `NEGATIVE: ${NEGATIVE_HINT}`,
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
-export async function callTeaserApi(
-  storyText: string,
-  backendStyleId: string,
-  outputLanguage: string = 'ko',
-): Promise<import('../types/workflow').TeaserApiResult> {
-  const response = await fetchFromApiBase('/api/teaser', {
+async function generateReferenceImage(
+  style: VisualStyleId,
+  characterVisualPrompt: string,
+): Promise<GeneratedReferenceImage> {
+  const prompt = buildReferencePrompt(style, characterVisualPrompt);
+  const response = await fetch(`${getApiBaseUrl()}/api/image/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, style_template: style }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseHttpError(response));
+  }
+
+  const data = await response.json() as { image_base64: string };
+  return { style, imageBase64: data.image_base64 };
+}
+
+export async function generateReferenceImages(
+  characterVisualPrompt: string,
+  styles: VisualStyleId[] = STYLE_REFERENCE_ORDER,
+): Promise<GeneratedReferenceImage[]> {
+  const results = await Promise.allSettled(
+    styles.map((style) => generateReferenceImage(style, characterVisualPrompt)),
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<GeneratedReferenceImage> => r.status === 'fulfilled')
+    .map((r) => r.value);
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline preview
+// ---------------------------------------------------------------------------
+
+export async function fetchPipelinePreview(
+  manuscript: string,
+  styleTemplate: PipelineStyleTemplate,
+  outputLanguage: PipelineOutputLanguage = 'ko',
+  genre = '',
+  tone = '',
+): Promise<PipelinePreviewModel> {
+  const response = await fetch(`${getApiBaseUrl()}/api/prompt-preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      source_text: storyText,
-      style_template: backendStyleId,
+      manuscript,
+      style_template: styleTemplate,
       output_language: outputLanguage,
-      max_image_cuts: 9,
+      genre,
+      tone,
     }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`API error (${response.status}): ${errorText}`);
+    throw new Error(await parseHttpError(response));
   }
 
-  return response.json();
+  return response.json() as Promise<PipelinePreviewModel>;
 }
 
-export interface PromptPreviewCut {
-  index: number;
-  prompt: string;
-  reference_inputs: string[];
-}
+// ---------------------------------------------------------------------------
+// Generate media from preview (POST /api/teaser -> PipelineResultModel)
+// ---------------------------------------------------------------------------
 
-export interface PromptPreviewResult {
-  plan: import('../types/workflow').TeaserPlan;
-  anchor_prompt: string;
-  cuts: PromptPreviewCut[];
-}
-
-type LegacyPromptPreviewPayload = {
-  source_text: string;
-  style_template: string;
-  output_language: string;
-};
-
-type PipelinePromptPreviewPayload = {
-  manuscript: string;
-  style_template: string;
-  output_language: string;
-  genre: string;
-  tone: string;
-};
-
-type PipelinePreviewResponse = {
-  cut_plan: {
-    cuts: Array<{
-      cut_number: number;
-      styled_prompt: string;
-      reference_inputs: string[];
-    }>;
-  };
-  anchor_prompt: string;
-  characters: unknown;
-};
-
-async function fetchPromptPreview(
-  path: string,
-  body: Record<string, unknown>,
-): Promise<PromptPreviewResult> {
-  const response = await fetchFromApiBase(path, {
+export async function generateMediaFromPreview(
+  preview: PipelinePreviewModel,
+  styleTemplate: PipelineStyleTemplate,
+  outputLanguage: PipelineOutputLanguage = 'ko',
+): Promise<PipelineResultModel> {
+  const response = await fetch(`${getApiBaseUrl()}/api/teaser`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      preview,
+      style_template: styleTemplate,
+      output_language: outputLanguage,
+    }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Preview API error (${response.status}): ${errorText}`);
+    throw new Error(await parseHttpError(response));
   }
 
-  const data = await response.json();
-
-  if (data?.cuts && Array.isArray(data.cuts) && 'cut_number' in (data.cuts[0] || {})) {
-    return {
-      plan: data.plan,
-      anchor_prompt: data.anchor_prompt || '',
-      cuts: (data.cuts as Array<{ cut_number: number; styled_prompt: string; prompt?: string; reference_inputs?: string[] }>).map(
-        (cut) => ({
-          index: cut.cut_number,
-          prompt: cut.prompt ?? cut.styled_prompt ?? '',
-          reference_inputs: cut.reference_inputs ?? [],
-        }),
-      ),
-    };
-  }
-
-  if (data?.cut_plan && Array.isArray(data.cut_plan?.cuts)) {
-    return {
-      plan: data.cut_plan,
-      anchor_prompt: data.anchor_prompt || '',
-      cuts: data.cut_plan.cuts.map((cut: { cut_number: number; styled_prompt: string; reference_inputs?: string[] }) => ({
-        index: cut.cut_number,
-        prompt: cut.styled_prompt,
-        reference_inputs: cut.reference_inputs ?? [],
-      })),
-    };
-  }
-
-  return data as PromptPreviewResult;
+  return response.json() as Promise<PipelineResultModel>;
 }
 
-export async function callPromptPreview(
-  storyText: string,
-  backendStyleId: string,
-  outputLanguage: string = 'ko',
-): Promise<PromptPreviewResult> {
-  try {
-    const legacyPayload: LegacyPromptPreviewPayload = {
-      source_text: storyText,
-      style_template: backendStyleId,
-      output_language: outputLanguage,
-    };
-    const pipelinePayload: PipelinePromptPreviewPayload = {
-      manuscript: storyText,
-      style_template: backendStyleId,
-      output_language: outputLanguage,
-      genre: '',
-      tone: '',
-    };
+// ---------------------------------------------------------------------------
+// SSE pipeline generation (POST /api/pipeline/generate)
+// ---------------------------------------------------------------------------
 
-    let lastError: Error | null = null;
-    for (const path of PREVIEW_PATHS) {
-      try {
-        const payload = path.includes('/pipeline/') ? pipelinePayload : legacyPayload;
-        return await fetchPromptPreview(path, payload);
-      } catch (error) {
-        if (error instanceof Error) {
-          lastError = error;
+export async function startPipelineGeneration(
+  request: StartPipelineRequest,
+  handlers: SseHandlers,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/api/pipeline/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    signal: abortSignal,
+  });
+
+  if (!response.ok) {
+    handlers.onError(await parseHttpError(response));
+    return;
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    handlers.onError('No response body from pipeline');
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const frame = parseSseFrame(line);
+        if (!frame) continue;
+
+        const eventType = frame.type as string | undefined;
+
+        if (eventType === 'progress') {
+          handlers.onProgress(frame as unknown as PipelineProgressEvent);
+        } else if (eventType === 'result' || eventType === 'complete') {
+          handlers.onComplete(frame as unknown as PipelineResultModel);
+        } else if (eventType === 'error') {
+          handlers.onError(String(frame.message ?? 'Pipeline error'));
         }
       }
     }
-
-    if (lastError) {
-      throw lastError;
-    }
-    throw new Error('Failed to fetch preview');
-  } catch (error) {
-    throw asConnectError(error);
+  } finally {
+    reader.releaseLock();
   }
 }
 
-export interface StylePreviewResult {
-  style_template: string;
-  images: string[];  // base64 PNG strings
-}
-
-export async function callStylePreview(
-  styleTemplate: string,
-  storyText?: string,
-): Promise<StylePreviewResult> {
-  const response = await fetchFromApiBase('/api/style-preview', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      style_template: styleTemplate,
-      story_text: storyText || undefined,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Style preview API error (${response.status}): ${errorText}`);
-  }
-
-  return response.json();
-}
-
-export interface VideoGenCallbacks {
-  onProgress: (progress: number, message: string) => void;
-  onComplete: (videoBase64: string, duration: number) => void;
-  onError: (error: string) => void;
-}
+// ---------------------------------------------------------------------------
+// Chanwoong: video generation via Veo 3.1 (POST /api/teaser/video, SSE)
+// ---------------------------------------------------------------------------
 
 export async function startVideoGeneration(
   cutsBase64: string[],
@@ -409,7 +332,7 @@ export async function startVideoGeneration(
   abortSignal?: AbortSignal,
   storyPrompt?: string,
 ): Promise<void> {
-  const response = await fetchFromApiBase('/api/teaser/video', {
+  const response = await fetch(`${getApiBaseUrl()}/api/teaser/video`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -439,60 +362,97 @@ export async function startVideoGeneration(
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.type === 'progress') {
-              const pct = Math.round((data.step / data.total_steps) * 100);
-              callbacks.onProgress(pct, data.message);
-            } else if (data.type === 'result') {
-              callbacks.onComplete(data.video_base64, data.duration_seconds);
-            } else if (data.type === 'error') {
-              callbacks.onError(data.message);
-            }
-          } catch {
-            // skip malformed lines
+        for (const line of lines) {
+          const frame = parseSseFrame(line);
+          if (!frame) continue;
+
+          if (frame.type === 'progress') {
+            const total = Number(frame.total_steps) || 1;
+            const step = Number(frame.step) || 0;
+            const pct = Math.round((step / total) * 100);
+            callbacks.onProgress(pct, String(frame.message ?? ''));
+          } else if (frame.type === 'result') {
+            callbacks.onComplete(String(frame.video_base64 ?? ''), Number(frame.duration_seconds ?? 0));
+          } else if (frame.type === 'error') {
+            callbacks.onError(String(frame.message ?? 'Video generation error'));
           }
         }
       }
+    } finally {
+      reader.releaseLock();
     }
   } else {
-    const result = await response.json();
+    const result = await response.json() as { video_base64?: string; duration_seconds?: number };
     if (result.video_base64) {
-      callbacks.onComplete(result.video_base64, result.duration_seconds);
+      callbacks.onComplete(result.video_base64, result.duration_seconds ?? 0);
     } else {
       callbacks.onError('Unexpected response format');
     }
   }
 }
 
+// ---------------------------------------------------------------------------
+// Chanwoong: legacy direct teaser call (POST /api/teaser -> TeaserApiResult)
+// ---------------------------------------------------------------------------
+
+export async function callTeaserApi(
+  storyText: string,
+  backendStyleId: string,
+  outputLanguage = 'ko',
+): Promise<TeaserApiResult> {
+  const response = await fetch(`${getApiBaseUrl()}/api/teaser`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_text: storyText,
+      style_template: backendStyleId,
+      output_language: outputLanguage,
+      max_image_cuts: 9,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API error (${response.status}): ${errorText}`);
+  }
+
+  return response.json() as Promise<TeaserApiResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Chanwoong: convert TeaserApiResult to VideoExportModel
+// ---------------------------------------------------------------------------
+
 export function teaserResultToExport(
-  result: import('../types/workflow').TeaserApiResult,
+  result: TeaserApiResult,
   styleTone: string,
-): import('../types/workflow').VideoExportModel {
-  const cuts = result.cuts.sort((a, b) => a.index - b.index);
-  const previewImageUrl = cuts.length > 0
-    ? `data:image/png;base64,${cuts[0].image_base64}`
-    : `data:image/png;base64,${result.character_anchor_image_base64}`;
+): VideoExportModel {
+  const cuts = result.cuts.slice().sort((a, b) => a.index - b.index);
+  const previewImageUrl =
+    cuts.length > 0
+      ? `data:image/png;base64,${cuts[0].image_base64}`
+      : `data:image/png;base64,${result.character_anchor_image_base64}`;
+
+  const sourceFrames: SourceFrame[] = cuts.map((cut) => ({
+    index: cut.index,
+    imageUrl: `data:image/png;base64,${cut.image_base64}`,
+    selectedOptionLabel: `Cut ${cut.index}`,
+  }));
 
   return {
     title: result.plan.title || 'Your Teaser',
     subtitle: 'AI-generated 9-cut teaser is ready for preview.',
     previewImageUrl,
-    sourceFrames: cuts.map((cut) => ({
-      index: cut.index,
-      imageUrl: `data:image/png;base64,${cut.image_base64}`,
-      selectedOptionLabel: `Cut ${cut.index}`,
-    })),
+    sourceFrames,
     settings: {
       musicStyle: styleTone,
       transition: 'Fade',
@@ -502,3 +462,12 @@ export function teaserResultToExport(
     renderSeconds: 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Suppress unused import warning for STYLE_TONE_BY_ID (used by consumers via
+// re-export or available for callers building VideoExportModel settings)
+// ---------------------------------------------------------------------------
+export { STYLE_TONE_BY_ID };
+
+// Re-export parseErrorMessage for consumers that display error strings
+export { parseErrorMessage };

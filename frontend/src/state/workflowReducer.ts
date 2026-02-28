@@ -2,6 +2,7 @@ import { FRAME_SEQUENCE } from '../data/workflowData';
 import type {
   AppWorkflowState,
   FrameSelection,
+  PipelineProgressEvent,
   StoryInputMode,
   WorkflowAction,
   WorkflowStep,
@@ -62,6 +63,15 @@ export function canAdvanceFromStep(state: AppWorkflowState): boolean {
   }
 }
 
+function createInitialProcessingState() {
+  return {
+    running: false,
+    errorMessage: null,
+    runId: null,
+    progressByStep: {} as Record<number, PipelineProgressEvent>,
+  };
+}
+
 export function createInitialWorkflowState(): AppWorkflowState {
   return {
     step: 'story_input',
@@ -76,10 +86,8 @@ export function createInitialWorkflowState(): AppWorkflowState {
     },
     selectedStyle: null,
     frameSelections: createInitialFrames(),
-    processing: {
-      running: false,
-      errorMessage: null,
-    },
+    processing: createInitialProcessingState(),
+    result: null,
     videoExport: null,
   };
 }
@@ -94,8 +102,10 @@ function applyBackStep(current: WorkflowStep): WorkflowStep {
       return 'meta_prompt_2';
     case 'processing_state':
       return 'meta_prompt_3';
-    case 'video_export':
+    case 'result':
       return 'meta_prompt_3';
+    case 'video_export':
+      return 'result';
     default:
       return current;
   }
@@ -158,6 +168,7 @@ export function workflowReducer(
         ...state,
         selectedStyle: action.payload.style,
         frameSelections: frames,
+        result: null,
         videoExport: null,
       };
     }
@@ -234,43 +245,57 @@ export function workflowReducer(
       };
 
     case 'START_PROCESSING':
-      if (state.selectedStyle === null) {
-        return state;
-      }
       return {
         ...state,
-        step: 'meta_prompt_3',
+        step: 'processing_state',
+        result: null,
         processing: {
+          ...createInitialProcessingState(),
           running: true,
-          errorMessage: null,
         },
       };
+
+    case 'SET_RUN_ID':
+      return {
+        ...state,
+        processing: {
+          ...state.processing,
+          runId: action.payload,
+        },
+      };
+
+    case 'UPDATE_PROGRESS': {
+      const event = action.payload;
+      return {
+        ...state,
+        processing: {
+          ...state.processing,
+          progressByStep: {
+            ...state.processing.progressByStep,
+            [event.step]: event,
+          },
+          running: event.status === 'failed' ? false : state.processing.running,
+        },
+      };
+    }
 
     case 'PROCESSING_SUCCESS':
       return {
         ...state,
-        step: 'meta_prompt_3',
-        videoExport: action.payload,
+        step: 'result',
+        result: action.payload,
         processing: {
+          ...state.processing,
           running: false,
-          errorMessage: null,
         },
-      };
-
-    case 'GO_VIDEO_EXPORT':
-      if (!state.videoExport) {
-        return state;
-      }
-      return {
-        ...state,
-        step: 'video_export',
       };
 
     case 'PROCESSING_ERROR':
       return {
         ...state,
-        step: 'meta_prompt_3',
+        step: 'processing_state',
         processing: {
+          ...state.processing,
           running: false,
           errorMessage: action.payload,
         },
@@ -283,6 +308,15 @@ export function workflowReducer(
           ...state.processing,
           errorMessage: null,
         },
+      };
+
+    case 'GO_VIDEO_EXPORT':
+      if (!state.result) {
+        return state;
+      }
+      return {
+        ...state,
+        step: 'video_export',
       };
 
     case 'JUMP_TO_STEP':

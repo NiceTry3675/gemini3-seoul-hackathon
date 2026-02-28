@@ -20,53 +20,57 @@ From repo root:
 
 ```bash
 source .venv/bin/activate
-uvicorn backend.app:app --reload --port 8000
+cd backend
+uvicorn app.main:app --reload --port 8000
 ```
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8000/api/health
 ```
 
-Smoke UI (prompt preview + image generation):
+Pipeline generate API (SSE stream):
 
 ```bash
-open http://127.0.0.1:8000/smoke
-```
-
-Prompt preview API:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/prompt-preview \
+curl -N -X POST http://127.0.0.1:8000/api/pipeline/generate \
   -H 'Content-Type: application/json' \
   -d '{
-    "source_text": "여기에 소설 초반 텍스트를 넣으세요",
+    "manuscript": "여기에 소설 초반 텍스트를 넣으세요",
+    "genre": "fantasy",
+    "tone": "mysterious",
     "output_language": "ko",
+    "output_mode": "image",
     "style_template": "webtoon_cel"
   }'
 ```
 
-Generate teaser (returns plan + anchor image + 9 cuts as base64 PNG):
+Pipeline prompt preview API:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/teaser \
+curl -X POST http://127.0.0.1:8000/api/pipeline/preview \
   -H 'Content-Type: application/json' \
   -d '{
-    "source_text": "여기에 소설 초반 텍스트를 넣으세요",
+    "manuscript": "여기에 소설 초반 텍스트를 넣으세요",
+    "genre": "fantasy",
+    "tone": "mysterious",
     "output_language": "ko",
-    "style_template": "webtoon_cel",
-    "max_image_cuts": 9
+    "output_mode": "image",
+    "style_template": "webtoon_cel"
   }'
+```
+
+Run history APIs:
+
+```bash
+curl http://127.0.0.1:8000/api/pipeline/runs
+curl http://127.0.0.1:8000/api/pipeline/runs/<run_id>
 ```
 
 Notes:
 
-- `/api/teaser` is sequential (`anchor + cuts`) so full 9 cuts can take time.
-- For smoke tests, use a smaller `max_image_cuts` (for example 1~3).
+- `/api/pipeline/generate` is sequential (`anchor + cuts`) so full 9 cuts can take time.
 - Prompt templates and system instructions are managed in `backend/system_instruction.toml`.
-- Generated images are saved under `outputs/teaser_<timestamp>_<id>/`
-  with files: `plan.json`, `anchor_prompt.txt`, `anchor.png`, and `cut_01.png...`.
 - If you see SSL timeout errors (for example `_ssl.c:983: The handshake operation timed out`),
   retry once and check outbound network/proxy settings. The backend now retries transient network failures.
 - Do not set very short request deadlines; Gemini Developer API rejects deadlines under 10 seconds.

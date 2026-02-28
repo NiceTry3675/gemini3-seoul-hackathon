@@ -1,192 +1,132 @@
 import { useEffect, useReducer } from 'react';
-import MetaPrompt1Screen from './components/screens/MetaPrompt1Screen';
-import MetaPrompt2Screen from './components/screens/MetaPrompt2Screen';
-import MetaPrompt3Screen from './components/screens/MetaPrompt3Screen';
 import ProcessingStateScreen from './components/screens/ProcessingStateScreen';
 import StoryInputScreen from './components/screens/StoryInputScreen';
 import VideoExportScreen from './components/screens/VideoExportScreen';
-import { generateFrameOptions, buildInitialMetaPrompt, startMockRender } from './services/workflowService';
-import { createInitialWorkflowState, workflowReducer } from './state/workflowReducer';
-import type { WorkflowStep } from './types/workflow';
+import { startPipelineGeneration } from './services/workflowService';
+import {
+  canStartPipeline,
+  createInitialWorkflowState,
+  workflowReducer,
+} from './state/workflowReducer';
 
-function downloadWorkflowSnapshot(snapshot: unknown): void {
+function downloadSnapshot(snapshot: unknown): void {
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
     type: 'application/json;charset=utf-8',
   });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'teaserstudio-mock-export.json';
+  anchor.download = 'teaserstudio-export.json';
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function normalizeError(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return 'Generation cancelled.';
+  }
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return 'Unknown pipeline error.';
 }
 
 export default function App() {
   const [state, dispatch] = useReducer(workflowReducer, undefined, createInitialWorkflowState);
 
   useEffect(() => {
-    if (state.step !== 'processing_state' || !state.processing.running || !state.selectedStyle) {
+    if (state.step !== 'processing_state' || !state.processing.running) {
       return undefined;
     }
 
-    let cancelled = false;
+    const abortController = new AbortController();
 
-    void startMockRender({
-      storyText: state.storyInput.text,
-      metaPrompt: state.metaPrompt.draft,
-      style: state.selectedStyle,
-      frameSelections: state.frameSelections,
-    })
-      .then((videoExport) => {
-        if (!cancelled) {
-          dispatch({ type: 'PROCESSING_SUCCESS', payload: videoExport });
-        }
+    void startPipelineGeneration(
+      state.storyInput,
+      {
+        onRunCreated: (runId) => dispatch({ type: 'SET_RUN_ID', payload: runId }),
+        onProgress: (progress) => dispatch({ type: 'UPDATE_PROGRESS', payload: progress }),
+      },
+      abortController.signal,
+    )
+      .then((result) => {
+        dispatch({ type: 'PROCESSING_SUCCESS', payload: result });
       })
       .catch((error: unknown) => {
-        if (!cancelled) {
-          dispatch({
-            type: 'PROCESSING_ERROR',
-            payload: error instanceof Error ? error.message : 'Unknown mock rendering error.',
-          });
+        const message = normalizeError(error);
+        if (message !== 'Generation cancelled.') {
+          dispatch({ type: 'PROCESSING_ERROR', payload: message });
         }
       });
 
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
-  }, [
-    state.step,
-    state.processing.running,
-    state.selectedStyle,
-    state.storyInput.text,
-    state.metaPrompt.draft,
-    state.frameSelections,
-  ]);
+  }, [state.step, state.processing.running, state.storyInput]);
 
-  const step = state.step;
-
-  const goBack = () => dispatch({ type: 'BACK' });
-
-  const goNext = () => dispatch({ type: 'NEXT' });
-
-  const startProcessing = () => {
-    dispatch({ type: 'CLEAR_PROCESSING_ERROR' });
-    dispatch({ type: 'START_PROCESSING' });
-  };
-
-  const handleStoryNext = () => {
-    if (!state.metaPrompt.draft.trim()) {
-      dispatch({
-        type: 'SET_META_DRAFT',
-        payload: buildInitialMetaPrompt(state.storyInput.text),
-      });
-    }
-
-    dispatch({ type: 'NEXT' });
-  };
-
-  const handleStyleSelection = (style: NonNullable<typeof state.selectedStyle>) => {
-    const frameOptions = state.frameSelections.map((frame) =>
-      generateFrameOptions(frame.frameIndex, style),
+  if (state.step === 'story_input') {
+    return (
+      <StoryInputScreen
+        manuscript={state.storyInput.manuscript}
+        genre={state.storyInput.genre}
+        tone={state.storyInput.tone}
+        outputLanguage={state.storyInput.outputLanguage}
+        styleTemplate={state.storyInput.styleTemplate}
+        canSubmit={canStartPipeline(state)}
+        onManuscriptChange={(value) => dispatch({ type: 'SET_MANUSCRIPT', payload: value })}
+        onGenreChange={(value) => dispatch({ type: 'SET_GENRE', payload: value })}
+        onToneChange={(value) => dispatch({ type: 'SET_TONE', payload: value })}
+        onOutputLanguageChange={(value) => dispatch({ type: 'SET_OUTPUT_LANGUAGE', payload: value })}
+        onStyleTemplateChange={(value) => dispatch({ type: 'SET_STYLE_TEMPLATE', payload: value })}
+        onSubmit={() => {
+          dispatch({ type: 'CLEAR_PROCESSING_ERROR' });
+          dispatch({ type: 'START_PROCESSING' });
+        }}
+      />
     );
-    dispatch({
-      type: 'APPLY_STYLE',
-      payload: {
-        style,
-        frameOptions,
-      },
-    });
-  };
+  }
 
-  const handleDownload = () => {
-    if (!state.videoExport) {
-      return;
-    }
+  if (state.step === 'processing_state') {
+    return (
+      <ProcessingStateScreen
+        running={state.processing.running}
+        runId={state.processing.runId}
+        progressByStep={state.processing.progressByStep}
+        errorMessage={state.processing.errorMessage}
+        onRetry={() => {
+          dispatch({ type: 'CLEAR_PROCESSING_ERROR' });
+          dispatch({ type: 'START_PROCESSING' });
+        }}
+        onBack={() => dispatch({ type: 'BACK_TO_INPUT' })}
+      />
+    );
+  }
 
-    downloadWorkflowSnapshot({
-      exportedAt: new Date().toISOString(),
-      workflowStep: state.step,
-      storyInput: state.storyInput,
-      metaPrompt: state.metaPrompt,
-      selectedStyle: state.selectedStyle,
-      frameSelections: state.frameSelections,
-      videoExport: state.videoExport,
-    });
-  };
+  if (state.result) {
+    return (
+      <VideoExportScreen
+        result={state.result}
+        onBack={() => dispatch({ type: 'BACK_TO_INPUT' })}
+        onDownload={() => {
+          downloadSnapshot({
+            exportedAt: new Date().toISOString(),
+            runId: state.processing.runId,
+            request: state.storyInput,
+            result: state.result,
+          });
+        }}
+      />
+    );
+  }
 
-  const renderStep = (currentStep: WorkflowStep) => {
-    switch (currentStep) {
-      case 'story_input':
-        return (
-          <StoryInputScreen
-            text={state.storyInput.text}
-            inputMode={state.storyInput.inputMode}
-            charCount={state.storyInput.charCount}
-            onTextChange={(value) => dispatch({ type: 'SET_STORY_TEXT', payload: value })}
-            onInputModeChange={(mode) => dispatch({ type: 'SET_STORY_INPUT_MODE', payload: mode })}
-            onNext={handleStoryNext}
-          />
-        );
-
-      case 'meta_prompt_1':
-        return (
-          <MetaPrompt1Screen
-            draft={state.metaPrompt.draft}
-            onDraftChange={(value) => dispatch({ type: 'SET_META_DRAFT', payload: value })}
-            onBack={goBack}
-            onNext={goNext}
-          />
-        );
-
-      case 'meta_prompt_2':
-        return (
-          <MetaPrompt2Screen
-            selectedStyle={state.selectedStyle}
-            onSelectStyle={handleStyleSelection}
-            onBack={goBack}
-            onNext={goNext}
-          />
-        );
-
-      case 'meta_prompt_3':
-        return (
-          <MetaPrompt3Screen
-            frameSelections={state.frameSelections}
-            onSelectOption={(frameIndex, optionId) =>
-              dispatch({ type: 'SELECT_FRAME_OPTION', payload: { frameIndex, optionId } })
-            }
-            onStartOver={() => dispatch({ type: 'RESET' })}
-            onGenerateTeaser={startProcessing}
-            onBack={goBack}
-          />
-        );
-
-      case 'processing_state':
-        return (
-          <ProcessingStateScreen
-            running={state.processing.running}
-            errorMessage={state.processing.errorMessage}
-            onRetry={startProcessing}
-            onBack={goBack}
-          />
-        );
-
-      case 'video_export':
-        return state.videoExport ? (
-          <VideoExportScreen videoExport={state.videoExport} onBack={goBack} onDownload={handleDownload} />
-        ) : (
-          <ProcessingStateScreen
-            running={false}
-            errorMessage="Missing export payload. Please retry generation from Meta Prompt 3."
-            onRetry={goBack}
-            onBack={goBack}
-          />
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return <>{renderStep(step)}</>;
+  return (
+    <ProcessingStateScreen
+      running={false}
+      runId={state.processing.runId}
+      progressByStep={state.processing.progressByStep}
+      errorMessage="Missing result payload. Please retry generation."
+      onRetry={() => dispatch({ type: 'START_PROCESSING' })}
+      onBack={() => dispatch({ type: 'BACK_TO_INPUT' })}
+    />
+  );
 }

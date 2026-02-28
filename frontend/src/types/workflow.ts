@@ -138,3 +138,104 @@ export const WORKFLOW_STEPS: WorkflowStep[] = [
   'processing_state',
   'video_export',
 ];
+
+export type PipelineWorkflowStep = 'story_input' | 'processing_state' | 'result';
+
+export type PipelineOutputLanguage = 'ko' | 'en' | 'ja';
+
+export type PipelineStyleTemplate =
+  | 'webtoon_cel'
+  | 'cinematic_realism'
+  | 'watercolor_dream'
+  | 'digital_masterpaint';
+
+export interface PipelineStyleOption {
+  id: PipelineStyleTemplate;
+  title: string;
+  description: string;
+}
+
+export interface PipelineStoryInputModel {
+  manuscript: string;
+  genre: string;
+  tone: string;
+  outputLanguage: PipelineOutputLanguage;
+  styleTemplate: PipelineStyleTemplate;
+}
+
+export type PipelineProgressStatus = 'running' | 'completed' | 'failed';
+
+export interface PipelineProgressEvent {
+  step: number;
+  step_name: string;
+  status: PipelineProgressStatus;
+  detail?: string | null;
+}
+
+export interface PipelineCharacter {
+  name: string;
+  appearance: string;
+  personality: string;
+  role: string;
+  visual_prompt: string;
+}
+
+export interface PipelineValidationIssue {
+  cut_number?: number | null;
+  issue_type: string;
+  description: string;
+  severity: 'error' | 'warning';
+}
+
+export interface PipelineValidationReport {
+  is_valid: boolean;
+  issues: PipelineValidationIssue[];
+  summary: string;
+}
+
+export interface PipelineGeneratedCut {
+  cut_number: number;
+  image_base64: string;
+  mime_type: string;
+  video_base64: string;
+  video_mime_type: string;
+  dialogue: string[];
+  narration: string;
+  description: string;
+}
+
+export interface PipelineResultModel {
+  characters: { characters: PipelineCharacter[] };
+  cuts: PipelineGeneratedCut[];
+  validation_report: PipelineValidationReport | null;
+  reference_images: Record<string, string>;
+}
+
+export interface PipelineProcessingState {
+  running: boolean;
+  errorMessage: string | null;
+  runId: string | null;
+  progressByStep: Record<number, PipelineProgressEvent>;
+}
+
+export interface PipelineWorkflowState {
+  step: PipelineWorkflowStep;
+  storyInput: PipelineStoryInputModel;
+  processing: PipelineProcessingState;
+  result: PipelineResultModel | null;
+}
+
+export type PipelineWorkflowAction =
+  | { type: 'SET_MANUSCRIPT'; payload: string }
+  | { type: 'SET_GENRE'; payload: string }
+  | { type: 'SET_TONE'; payload: string }
+  | { type: 'SET_OUTPUT_LANGUAGE'; payload: PipelineOutputLanguage }
+  | { type: 'SET_STYLE_TEMPLATE'; payload: PipelineStyleTemplate }
+  | { type: 'START_PROCESSING' }
+  | { type: 'SET_RUN_ID'; payload: string }
+  | { type: 'UPDATE_PROGRESS'; payload: PipelineProgressEvent }
+  | { type: 'PROCESSING_SUCCESS'; payload: PipelineResultModel }
+  | { type: 'PROCESSING_ERROR'; payload: string }
+  | { type: 'CLEAR_PROCESSING_ERROR' }
+  | { type: 'BACK_TO_INPUT' }
+  | { type: 'RESET' };

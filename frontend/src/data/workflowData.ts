@@ -1,10 +1,47 @@
-import type { VisualStyleId, VisualStyleOption } from '../types/workflow';
+import type {
+  PipelineOutputLanguage,
+  PipelineStyleOption,
+  VisualStyleId,
+  VisualStyleOption,
+} from '../types/workflow';
 
 export const PRIMARY_NAV_LINKS = [] as const;
 
 export const STORY_NAV_LINKS = [] as const;
 
 export const PROCESSING_NAV_LINKS = [] as const;
+
+export const PIPELINE_LANGUAGE_OPTIONS: Array<{
+  value: PipelineOutputLanguage;
+  label: string;
+}> = [
+  { value: 'ko', label: 'Korean (ko)' },
+  { value: 'en', label: 'English (en)' },
+  { value: 'ja', label: 'Japanese (ja)' },
+];
+
+export const PIPELINE_STYLE_OPTIONS: PipelineStyleOption[] = [
+  {
+    id: 'webtoon_cel',
+    title: 'Webtoon Cel',
+    description: 'Crisp Korean webtoon line art with flat colors and high contrast.',
+  },
+  {
+    id: 'cinematic_realism',
+    title: 'Cinematic Realism',
+    description: 'Semi-realistic detail with dramatic cinematic lighting.',
+  },
+  {
+    id: 'watercolor_dream',
+    title: 'Watercolor Dream',
+    description: 'Soft pastel watercolor mood with dreamy brush textures.',
+  },
+  {
+    id: 'digital_masterpaint',
+    title: 'Digital Masterpaint',
+    description: 'Rich digital painting with bold texture and saturated color.',
+  },
+];
 
 export const STORY_PLACEHOLDER =
   'Start typing your story script here...\n\nExample: In a world where AI creates art, one artist discovers the soul in the machine...';

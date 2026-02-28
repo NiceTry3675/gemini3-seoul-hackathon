@@ -1,103 +1,136 @@
-import StepProgress from '../layout/StepProgress';
 import TopNav from '../layout/TopNav';
 import Button from '../ui/Button';
-import { STORY_NAV_LINKS, STORY_PLACEHOLDER } from '../../data/workflowData';
-import type { StoryInputMode } from '../../types/workflow';
+import {
+  PIPELINE_LANGUAGE_OPTIONS,
+  PIPELINE_STYLE_OPTIONS,
+  STORY_NAV_LINKS,
+} from '../../data/workflowData';
+import type {
+  PipelineOutputLanguage,
+  PipelineStyleTemplate,
+} from '../../types/workflow';
 
 interface StoryInputScreenProps {
-  text: string;
-  inputMode: StoryInputMode;
-  charCount: number;
-  onTextChange: (value: string) => void;
-  onInputModeChange: (mode: StoryInputMode) => void;
-  onNext: () => void;
+  manuscript: string;
+  genre: string;
+  tone: string;
+  outputLanguage: PipelineOutputLanguage;
+  styleTemplate: PipelineStyleTemplate;
+  canSubmit: boolean;
+  onManuscriptChange: (value: string) => void;
+  onGenreChange: (value: string) => void;
+  onToneChange: (value: string) => void;
+  onOutputLanguageChange: (value: PipelineOutputLanguage) => void;
+  onStyleTemplateChange: (value: PipelineStyleTemplate) => void;
+  onSubmit: () => void;
 }
 
 export default function StoryInputScreen({
-  text,
-  inputMode,
-  charCount,
-  onTextChange,
-  onInputModeChange,
-  onNext,
+  manuscript,
+  genre,
+  tone,
+  outputLanguage,
+  styleTemplate,
+  canSubmit,
+  onManuscriptChange,
+  onGenreChange,
+  onToneChange,
+  onOutputLanguageChange,
+  onStyleTemplateChange,
+  onSubmit,
 }: StoryInputScreenProps) {
   return (
     <div className="min-h-screen">
       <TopNav links={STORY_NAV_LINKS} innerClassName="max-w-[1200px] px-6 lg:px-10" />
 
-      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-16 pt-10 lg:px-10">
-        <StepProgress
-          stepLabel="STEP 1 OF 4"
-          nextLabel="Next: Meta Prompt"
-          labels={['Story', 'Meta', 'Visuals', 'Export']}
-          currentIndex={1}
-        />
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-8 px-6 pb-16 pt-10 lg:px-10">
+        <section className="space-y-2">
+          <h2 className="text-4xl font-black tracking-tight text-slate-50">Create 9-Cut Teaser</h2>
+          <p className="max-w-3xl text-slate-400">
+            Backend pipeline 기준 입력값을 채우고 생성을 시작하세요. 결과는 9컷 이미지 그리드로 표시됩니다.
+          </p>
+        </section>
 
-        <div className="mx-auto mt-10 w-full max-w-[980px]">
-          <div className="mb-10 text-center">
-            <h2 className="text-5xl font-black tracking-tight text-slate-50">Tell your story</h2>
-            <p className="mx-auto mt-4 max-w-[560px] text-xl text-slate-400">
-              Enter the raw text or script you want to transform into a captivating teaser video.
-            </p>
-          </div>
-
-          <section className="overflow-hidden rounded-2xl border border-ts-border bg-ts-panel/70">
-            <div className="flex items-center justify-between border-b border-ts-border px-6 py-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                <span className="material-symbols-outlined text-base">description</span>
-                <span>Input Mode</span>
-              </div>
-
-              <div className="rounded-lg border border-ts-border bg-ts-nav p-1 text-sm">
-                <button
-                  type="button"
-                  onClick={() => onInputModeChange('summary')}
-                  className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'summary'
-                    ? 'bg-ts-primary text-white'
-                    : 'text-ts-text-muted hover:text-ts-text'
-                    }`}
-                >
-                  Summary
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onInputModeChange('original')}
-                  className={`rounded px-3 py-1.5 transition-colors ${inputMode === 'original'
-                    ? 'bg-ts-primary text-white'
-                    : 'text-ts-text-muted hover:text-ts-text'
-                    }`}
-                >
-                  Original
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              className="teaser-scrollbar h-[320px] w-full resize-none bg-transparent px-6 py-6 text-lg leading-relaxed text-slate-100 outline-none placeholder:text-slate-500"
-              value={text}
-              onChange={(event) => onTextChange(event.target.value)}
-              placeholder={STORY_PLACEHOLDER}
-              aria-label="Story input"
+        <section className="grid grid-cols-1 gap-4 rounded-2xl border border-ts-border bg-ts-panel/70 p-6 md:grid-cols-2">
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-slate-200">Genre</span>
+            <input
+              type="text"
+              value={genre}
+              onChange={(event) => onGenreChange(event.target.value)}
+              placeholder="fantasy"
+              className="rounded-lg border border-ts-border bg-[#101624] px-3 py-2 text-slate-100 outline-none focus:border-ts-primary"
             />
+          </label>
 
-            <div className="flex items-center justify-end px-6 pb-5 pt-1 text-sm text-slate-500">
-              {charCount} characters
-            </div>
-          </section>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-slate-200">Tone</span>
+            <input
+              type="text"
+              value={tone}
+              onChange={(event) => onToneChange(event.target.value)}
+              placeholder="mysterious"
+              className="rounded-lg border border-ts-border bg-[#101624] px-3 py-2 text-slate-100 outline-none focus:border-ts-primary"
+            />
+          </label>
 
-          <div className="mt-10 flex items-center justify-end gap-6">
-            <Button variant="ghost" size="sm">
-              Save Draft
-            </Button>
-            <Button
-              onClick={onNext}
-              variant="primary"
-              size="md"
-              endIcon={<span className="material-symbols-outlined text-base">arrow_forward</span>}
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-slate-200">Output Language</span>
+            <select
+              value={outputLanguage}
+              onChange={(event) => onOutputLanguageChange(event.target.value as PipelineOutputLanguage)}
+              className="rounded-lg border border-ts-border bg-[#101624] px-3 py-2 text-slate-100 outline-none focus:border-ts-primary"
             >
-              Next: Meta Prompt
-            </Button>
+              {PIPELINE_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-slate-200">Style Template</span>
+            <select
+              value={styleTemplate}
+              onChange={(event) => onStyleTemplateChange(event.target.value as PipelineStyleTemplate)}
+              className="rounded-lg border border-ts-border bg-[#101624] px-3 py-2 text-slate-100 outline-none focus:border-ts-primary"
+            >
+              {PIPELINE_STYLE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border border-ts-border bg-ts-panel/70">
+          <div className="border-b border-ts-border px-6 py-3 text-sm font-semibold text-slate-200">
+            Manuscript
           </div>
+          <textarea
+            className="teaser-scrollbar h-[360px] w-full resize-none bg-transparent px-6 py-5 leading-relaxed text-slate-100 outline-none placeholder:text-slate-500"
+            value={manuscript}
+            onChange={(event) => onManuscriptChange(event.target.value)}
+            placeholder="소설 초반 텍스트를 입력하세요."
+            aria-label="Manuscript"
+          />
+          <div className="px-6 pb-4 text-right text-xs text-slate-500">
+            {manuscript.length.toLocaleString()} chars
+          </div>
+        </section>
+
+        <div className="flex justify-end">
+          <Button
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            variant="primary"
+            size="md"
+            endIcon={<span className="material-symbols-outlined text-base">play_arrow</span>}
+          >
+            Start Pipeline Generation
+          </Button>
         </div>
       </main>
     </div>

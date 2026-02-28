@@ -1,23 +1,10 @@
 import type { VisualStyleId, VisualStyleOption } from '../types/workflow';
 
-export const PRIMARY_NAV_LINKS = [
-  { label: 'Home', active: false },
-  { label: 'Projects', active: true },
-  { label: 'Settings', active: false },
-] as const;
+export const PRIMARY_NAV_LINKS = [] as const;
 
-export const STORY_NAV_LINKS = [
-  { label: 'Projects', active: false },
-  { label: 'Templates', active: false },
-  { label: 'Community', active: false },
-] as const;
+export const STORY_NAV_LINKS = [] as const;
 
-export const PROCESSING_NAV_LINKS = [
-  { label: 'Create', active: false },
-  { label: 'My Teasers', active: false },
-  { label: 'Gallery', active: false },
-  { label: 'Settings', active: false },
-] as const;
+export const PROCESSING_NAV_LINKS = [] as const;
 
 export const STORY_PLACEHOLDER =
   'Start typing your story script here...\n\nExample: In a world where AI creates art, one artist discovers the soul in the machine...';
@@ -57,7 +44,17 @@ export const STYLE_OPTIONS: VisualStyleOption[] = [
   },
 ];
 
-export const FRAME_SEQUENCE = ['Intro Hook', 'Action Build', 'Climax', 'Resolution'] as const;
+export const FRAME_SEQUENCE = [
+  'Opening Hook',
+  'Context Setup',
+  'Inciting Beat',
+  'Rising Action',
+  'Conflict Spike',
+  'Peak Moment',
+  'Aftershock',
+  'Resolution',
+  'End Hook',
+] as const;
 
 export const FRAME_TAGS = ['High Contrast', 'Glitch', 'Soft Light', 'Abstract'] as const;
 

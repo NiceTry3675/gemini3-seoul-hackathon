@@ -41,36 +41,38 @@ export default function VideoExportScreen({
 
       <main className="flex min-h-[calc(100vh-148px)] overflow-hidden">
         <section className="teaser-scrollbar flex flex-1 flex-col items-center overflow-y-auto p-6">
-          <div className="w-full max-w-[520px]">
+          <div className="w-full max-w-[1120px]">
             <header className="mb-6 text-left">
               <h2 className="text-5xl font-black tracking-tight text-slate-50">{videoExport.title}</h2>
               <p className="mt-2 text-lg text-slate-400">{videoExport.subtitle}</p>
             </header>
 
-            <article className="mx-auto w-full max-w-[360px]">
-              <div className="relative aspect-[9/16] overflow-hidden rounded-xl border border-slate-700 bg-black shadow-2xl">
-                <img src={videoExport.previewImageUrl} alt="Teaser preview" className="h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/70" />
+            <article className="mx-auto w-full max-w-[980px]">
+              <div className="mx-auto w-full max-w-[360px]">
+                <div className="relative aspect-[9/16] overflow-hidden rounded-xl border border-slate-700 bg-black shadow-2xl">
+                  <img src={videoExport.previewImageUrl} alt="Teaser preview" className="h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/70" />
 
-                <button
-                  type="button"
-                  aria-label="Play preview"
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <span className="flex size-16 items-center justify-center rounded-full border border-white/30 bg-white/20 backdrop-blur-sm">
-                    <span className="material-symbols-outlined text-4xl">play_arrow</span>
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    aria-label="Play preview"
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
+                    <span className="flex size-16 items-center justify-center rounded-full border border-white/30 bg-white/20 backdrop-blur-sm">
+                      <span className="material-symbols-outlined text-4xl">play_arrow</span>
+                    </span>
+                  </button>
 
-                <div className="absolute inset-x-0 bottom-0 px-4 py-4">
-                  <div className="h-1 rounded-full bg-white/30">
-                    <div className="h-full w-1/3 rounded-full bg-[#2b6cee]" />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-xs font-medium text-white">
-                    <span>0:05 / 0:15</span>
-                    <div className="flex items-center gap-3">
-                      <span className="material-symbols-outlined text-lg">volume_up</span>
-                      <span className="material-symbols-outlined text-lg">fullscreen</span>
+                  <div className="absolute inset-x-0 bottom-0 px-4 py-4">
+                    <div className="h-1 rounded-full bg-white/30">
+                      <div className="h-full w-1/3 rounded-full bg-[#2b6cee]" />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs font-medium text-white">
+                      <span>0:05 / 0:15</span>
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-lg">volume_up</span>
+                        <span className="material-symbols-outlined text-lg">fullscreen</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -78,7 +80,10 @@ export default function VideoExportScreen({
 
               <div className="mt-8">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Source Frames</p>
-                <div className="grid grid-cols-4 gap-3">
+                <div
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: `repeat(${videoExport.sourceFrames.length}, minmax(0, 1fr))` }}
+                >
                   {videoExport.sourceFrames.map((frame) => (
                     <div
                       key={frame.index}
@@ -122,20 +127,6 @@ export default function VideoExportScreen({
             ))}
           </div>
 
-          <div className="m-4 mt-auto rounded-xl border border-slate-700 bg-[#0e1525] p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Share Preview</p>
-            <div className="grid grid-cols-3 gap-2">
-              {['link', 'mail', 'share'].map((icon) => (
-                <button
-                  type="button"
-                  key={icon}
-                  className="flex h-9 items-center justify-center rounded border border-slate-700 bg-slate-800 text-slate-100 transition-colors hover:bg-slate-700"
-                >
-                  <span className="material-symbols-outlined text-lg">{icon}</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </aside>
       </main>
 

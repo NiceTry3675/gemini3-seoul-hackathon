@@ -23,20 +23,7 @@ export default function StoryInputScreen({
 }: StoryInputScreenProps) {
   return (
     <div className="min-h-screen">
-      <TopNav
-        links={STORY_NAV_LINKS}
-        rightContent={
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm">
-              Log In
-            </Button>
-            <Button variant="primary" size="sm">
-              Sign Up
-            </Button>
-          </div>
-        }
-        innerClassName="max-w-[1200px] px-6 lg:px-10"
-      />
+      <TopNav links={STORY_NAV_LINKS} innerClassName="max-w-[1200px] px-6 lg:px-10" />
 
       <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-16 pt-10 lg:px-10">
         <StepProgress

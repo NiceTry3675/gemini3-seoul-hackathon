@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import BottomActionBar from '../layout/BottomActionBar';
 import StepProgress from '../layout/StepProgress';
 import TopNav from '../layout/TopNav';
@@ -5,28 +6,58 @@ import { PRIMARY_NAV_LINKS } from '../../data/workflowData';
 
 interface MetaPrompt1ScreenProps {
   draft: string;
-  historyCount: number;
   onDraftChange: (value: string) => void;
-  onRegenerate: () => void;
   onBack: () => void;
   onNext: () => void;
 }
 
 export default function MetaPrompt1Screen({
   draft,
-  historyCount,
   onDraftChange,
-  onRegenerate,
   onBack,
   onNext,
 }: MetaPrompt1ScreenProps) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const canProceed = draft.trim().length > 0;
+
+  useEffect(() => {
+    if (copyState === 'idle') {
+      return;
+    }
+    const timer = window.setTimeout(() => setCopyState('idle'), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  const handleCopy = async () => {
+    if (!draft) {
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(draft);
+      } else {
+        const helper = document.createElement('textarea');
+        helper.value = draft;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'absolute';
+        helper.style.left = '-9999px';
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand('copy');
+        document.body.removeChild(helper);
+      }
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+  };
 
   return (
     <div className="min-h-screen">
       <TopNav links={PRIMARY_NAV_LINKS} />
 
-      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 py-10 lg:px-10">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-36 pt-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 2 OF 4"
           nextLabel="Next: Choose Visual Style"
@@ -45,19 +76,11 @@ export default function MetaPrompt1Screen({
           <div className="group relative">
             <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-[#2b6cee]/50 to-purple-600/40 opacity-30 blur transition duration-500 group-hover:opacity-50" />
             <div className="relative overflow-hidden rounded-xl border border-slate-700 bg-[#151b26] shadow-xl">
-              <div className="flex items-center justify-between border-b border-slate-700/80 bg-[#111827] px-4 py-3">
+              <div className="flex items-center border-b border-slate-700/80 bg-[#111827] px-4 py-3">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                   <span className="material-symbols-outlined text-base">auto_awesome</span>
                   AI Generated Draft
                 </div>
-                <button
-                  type="button"
-                  onClick={onRegenerate}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#2b6cee] transition-colors hover:text-blue-400"
-                >
-                  <span className="material-symbols-outlined text-sm">refresh</span>
-                  Regenerate
-                </button>
               </div>
 
               <textarea
@@ -70,13 +93,13 @@ export default function MetaPrompt1Screen({
               <div className="flex items-center justify-between border-t border-slate-700/70 px-5 py-3 text-xs text-slate-500">
                 <span>{draft.length} characters</span>
                 <div className="flex items-center gap-5">
-                  <button type="button" className="inline-flex items-center gap-1 transition-colors hover:text-slate-300">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="inline-flex items-center gap-1 transition-colors hover:text-slate-300"
+                  >
                     <span className="material-symbols-outlined text-base">content_copy</span>
-                    Copy
-                  </button>
-                  <button type="button" className="inline-flex items-center gap-1 transition-colors hover:text-slate-300">
-                    <span className="material-symbols-outlined text-base">history</span>
-                    History ({historyCount})
+                    {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy'}
                   </button>
                 </div>
               </div>

@@ -47,7 +47,7 @@ export default function BottomActionBar({
   innerClassName = 'max-w-[1200px] px-6 lg:px-10',
 }: BottomActionBarProps) {
   return (
-    <footer className="sticky bottom-0 z-10 border-t border-ts-border/80 bg-ts-nav/90 py-4 backdrop-blur-md">
+    <footer className="fixed inset-x-0 bottom-0 z-50 border-t border-ts-border/80 bg-ts-nav/90 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur-md">
       <div className={`mx-auto flex w-full items-center justify-between ${innerClassName}`}>
         <div className="flex items-center gap-4">
           {backAction ? <Action action={backAction} /> : <div />}

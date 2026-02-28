@@ -12,21 +12,6 @@ interface TopNavProps {
   innerClassName?: string;
 }
 
-function DefaultRightContent() {
-  return (
-    <div className="flex items-center gap-4">
-      <button
-        type="button"
-        aria-label="Notifications"
-        className="rounded-full p-2 text-ts-text-muted transition-colors hover:bg-ts-surface hover:text-ts-text"
-      >
-        <span className="material-symbols-outlined text-xl">notifications</span>
-      </button>
-      <div className="size-9 rounded-full border border-ts-border bg-ts-surface" aria-hidden="true" />
-    </div>
-  );
-}
-
 export default function TopNav({
   links,
   rightContent,
@@ -40,21 +25,25 @@ export default function TopNav({
           <h1 className="text-xl font-bold tracking-tight text-ts-text">TeaserStudio</h1>
         </div>
 
-        <nav className="hidden items-center gap-8 md:flex">
-          {links.map((link) => (
-            <button
-              key={link.label}
-              type="button"
-              className={`text-sm font-medium transition-colors ${
-                link.active ? 'text-ts-primary' : 'text-ts-text-muted hover:text-ts-primary'
-              }`}
-            >
-              {link.label}
-            </button>
-          ))}
-        </nav>
+        {links.length > 0 ? (
+          <nav className="hidden items-center gap-8 md:flex">
+            {links.map((link) => (
+              <button
+                key={link.label}
+                type="button"
+                className={`text-sm font-medium transition-colors ${
+                  link.active ? 'text-ts-primary' : 'text-ts-text-muted hover:text-ts-primary'
+                }`}
+              >
+                {link.label}
+              </button>
+            ))}
+          </nav>
+        ) : (
+          <div className="hidden md:block" />
+        )}
 
-        {rightContent ?? <DefaultRightContent />}
+        {rightContent ?? <div className="hidden md:block" />}
       </div>
     </header>
   );

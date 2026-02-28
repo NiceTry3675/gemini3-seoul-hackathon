@@ -23,7 +23,7 @@ export default function MetaPrompt2Screen({
     <div className="min-h-screen">
       <TopNav links={PRIMARY_NAV_LINKS} />
 
-      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 py-10 lg:px-10">
+      <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-36 pt-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 3 OF 4"
           nextLabel="Next: Generate Teasers"

@@ -66,7 +66,7 @@ export default function MetaPrompt3Screen({
       <main className="mx-auto flex w-full max-w-[1200px] flex-col px-6 pb-36 pt-10 lg:px-10">
         <StepProgress
           stepLabel="STEP 4 OF 4"
-          nextLabel="In Progress"
+          nextLabel="Next: Pipeline Run"
           labels={['Story', 'Meta', 'Visuals', 'Export']}
           currentIndex={4}
         />
@@ -168,13 +168,13 @@ export default function MetaPrompt3Screen({
       <BottomActionBar
         backAction={{ label: 'Back', icon: 'arrow_back', onClick: onBack, emphasis: 'outline' }}
         primaryAction={{
-          label: 'Next: Export Preview',
-          icon: 'movie_filter',
+          label: 'Start Pipeline Generation',
+          icon: 'auto_awesome',
           onClick: onGenerateTeaser,
           disabled: !allGenerated,
           emphasis: 'primary',
         }}
-        hint="Cuts are generated automatically up to 9 before export."
+        hint="Cuts are prepared automatically. Start the backend pipeline when all 9 are ready."
       />
 
       <button

@@ -1,10 +1,65 @@
+import {
+  FRAME_IMAGE_POOL,
+  FRAME_SEQUENCE,
+  FRAME_TAGS,
+} from '../data/workflowData';
 import type {
+  FrameOption,
+  PipelineOutputLanguage,
+  PipelinePreviewModel,
   PipelineProgressEvent,
   PipelineResultModel,
-  PipelineStoryInputModel,
+  PipelineStyleTemplate,
+  VisualStyleId,
 } from '../types/workflow';
 
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000';
+
+const STYLE_SUBTITLES: Record<VisualStyleId, string[]> = {
+  webtoon_cel: ['Webtoon Flow', 'Bold Linework', 'Flat Color Pop', 'Panel Clarity'],
+  cinematic_realism: ['Neon Noir Style', 'Cinematic Depth', 'Drama Lighting', 'Epic Framing'],
+  watercolor_dream: ['Pastel Wash', 'Soft Texture', 'Dream Haze', 'Poetic Mood'],
+  digital_masterpaint: ['Rich Brushwork', 'Concept Splash', 'Color Burst', 'Hero Composition'],
+};
+
+const STYLE_DESCRIPTORS: Record<VisualStyleId, string> = {
+  webtoon_cel: '2D cel shading, crisp line art, korean webtoon style, flat colors, clear lighting, high contrast.',
+  cinematic_realism: 'Semi-realistic, intricate details, cinematic lighting, dramatic shadows, 8k resolution, photorealistic textures, depth of field.',
+  watercolor_dream: 'Watercolor painting, soft pastel colors, traditional media, fluid brush strokes, dreamy and ethereal atmosphere, paper texture.',
+  digital_masterpaint: 'High-quality digital painting, conceptual art, thick impasto strokes, rich and vibrant colors, masterpiece, highly detailed.',
+};
+
+const STYLE_REFERENCE_ORDER: VisualStyleId[] = [
+  'webtoon_cel',
+  'cinematic_realism',
+  'watercolor_dream',
+  'digital_masterpaint',
+];
+
+const NEGATIVE_HINT = 'no watermark, no logo, no signature, no extra text';
+
+interface SseHandlers {
+  onRunCreated: (runId: string) => void;
+  onProgress: (event: PipelineProgressEvent) => void;
+}
+
+export interface StartPipelineRequest {
+  manuscript: string;
+  styleTemplate: PipelineStyleTemplate;
+  outputLanguage?: PipelineOutputLanguage;
+  genre?: string;
+  tone?: string;
+}
+
+export interface GeneratedReferenceImage {
+  styleTemplate: VisualStyleId;
+  imageBase64: string;
+  mimeType: string;
+}
+
+interface GenerateMediaResponsePayload {
+  cuts: PipelineResultModel['cuts'];
+}
 
 function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL;
@@ -14,6 +69,15 @@ function getApiBaseUrl(): string {
 
   const trimmed = configured.trim();
   return trimmed.length > 0 ? trimmed.replace(/\/+$/, '') : DEFAULT_API_BASE_URL;
+}
+
+function hashString(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function parseErrorMessage(payload: unknown): string {
@@ -29,20 +93,6 @@ function parseErrorMessage(payload: unknown): string {
   }
 
   return 'Backend request failed.';
-}
-
-async function parseHttpError(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    return parseErrorMessage(body);
-  } catch {
-    return `Request failed (${response.status})`;
-  }
-}
-
-interface SseHandlers {
-  onRunCreated: (runId: string) => void;
-  onProgress: (event: PipelineProgressEvent) => void;
 }
 
 function parseJsonPayload(payload: string): unknown {
@@ -87,25 +137,175 @@ function parseSseFrame(frame: string): { event: string; data: string } | null {
   };
 }
 
+async function parseHttpError(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    return parseErrorMessage(body);
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+}
+
+export function generateFrameOptions(frameIndex: number, style: VisualStyleId): FrameOption[] {
+  const pool = FRAME_IMAGE_POOL[style];
+  const subtitles = STYLE_SUBTITLES[style];
+  const offset = hashString(`${style}:${frameIndex}`) % pool.length;
+
+  return Array.from({ length: 4 }).map((_, optionIdx) => {
+    const imageIndex = (offset + optionIdx) % pool.length;
+    const subtitleIndex = (frameIndex + optionIdx) % subtitles.length;
+
+    return {
+      id: `f${frameIndex}-opt-${optionIdx + 1}`,
+      label: `Option ${String.fromCharCode(65 + optionIdx)}`,
+      subtitle: subtitles[subtitleIndex],
+      tag: FRAME_TAGS[(offset + optionIdx) % FRAME_TAGS.length],
+      description: `${FRAME_SEQUENCE[frameIndex - 1]} variation ${optionIdx + 1}`,
+      imageUrl: pool[imageIndex],
+    };
+  });
+}
+
+export function mapVisualStyleToPipelineTemplate(style: VisualStyleId): PipelineStyleTemplate {
+  return style;
+}
+
+function buildReferencePrompt(styleTemplate: VisualStyleId, characterVisualPrompt: string): string {
+  const basePrompt = characterVisualPrompt.trim().length > 0
+    ? characterVisualPrompt.trim()
+    : 'young protagonist, expressive eyes, clear silhouette, consistent wardrobe details';
+
+  return [
+    STYLE_DESCRIPTORS[styleTemplate],
+    `Single character, clear full-body or half-body, neutral background, high readability. ${basePrompt}`,
+    NEGATIVE_HINT,
+  ].join('\n\n');
+}
+
+async function generateReferenceImage(
+  styleTemplate: VisualStyleId,
+  characterVisualPrompt: string,
+  signal: AbortSignal,
+): Promise<GeneratedReferenceImage> {
+  const response = await fetch(`${getApiBaseUrl()}/api/image/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt: buildReferencePrompt(styleTemplate, characterVisualPrompt),
+      reference_images: {},
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseHttpError(response));
+  }
+
+  const payload = await response.json() as { image_base64: string; mime_type: string };
+  return {
+    styleTemplate,
+    imageBase64: payload.image_base64,
+    mimeType: payload.mime_type,
+  };
+}
+
+export async function generateReferenceImages(
+  characterVisualPrompt: string,
+  signal: AbortSignal,
+): Promise<GeneratedReferenceImage[]> {
+  return Promise.all(
+    STYLE_REFERENCE_ORDER.map((styleTemplate) =>
+      generateReferenceImage(styleTemplate, characterVisualPrompt, signal)),
+  );
+}
+
+export async function fetchPipelinePreview(
+  request: StartPipelineRequest,
+  signal: AbortSignal,
+): Promise<PipelinePreviewModel> {
+  const genre = request.genre?.trim() ?? '';
+  const tone = request.tone?.trim() ?? '';
+
+  const response = await fetch(`${getApiBaseUrl()}/api/pipeline/preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      manuscript: request.manuscript,
+      ...(genre ? { genre } : {}),
+      ...(tone ? { tone } : {}),
+      output_language: request.outputLanguage ?? 'ko',
+      output_mode: 'image',
+      style_template: request.styleTemplate,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseHttpError(response));
+  }
+
+  return (await response.json()) as PipelinePreviewModel;
+}
+
+export async function generateMediaFromPreview(
+  preview: PipelinePreviewModel,
+  styleTemplate: PipelineStyleTemplate,
+  referenceImages: Record<string, string>,
+  signal: AbortSignal,
+): Promise<PipelineResultModel> {
+  const response = await fetch(`${getApiBaseUrl()}/api/pipeline/step/generate-media`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      cut_plan: preview.cut_plan,
+      character_sheet: preview.characters,
+      output_mode: 'image',
+      style_template: styleTemplate,
+      reference_images: referenceImages,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseHttpError(response));
+  }
+
+  const payload = await response.json() as GenerateMediaResponsePayload;
+
+  return {
+    characters: preview.characters,
+    cuts: payload.cuts,
+    validation_report: null,
+    reference_images: referenceImages,
+  };
+}
+
 export async function startPipelineGeneration(
-  storyInput: PipelineStoryInputModel,
+  request: StartPipelineRequest,
   handlers: SseHandlers,
   signal: AbortSignal,
 ): Promise<PipelineResultModel> {
-  const genre = storyInput.genre.trim();
-  const tone = storyInput.tone.trim();
+  const genre = request.genre?.trim() ?? '';
+  const tone = request.tone?.trim() ?? '';
+
   const response = await fetch(`${getApiBaseUrl()}/api/pipeline/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      manuscript: storyInput.manuscript,
+      manuscript: request.manuscript,
       ...(genre ? { genre } : {}),
       ...(tone ? { tone } : {}),
-      output_language: storyInput.outputLanguage,
+      output_language: request.outputLanguage ?? 'ko',
       output_mode: 'image',
-      style_template: storyInput.styleTemplate,
+      style_template: request.styleTemplate,
     }),
     signal,
   });

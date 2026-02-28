@@ -16,7 +16,7 @@ const STEPS: Array<{ step: number; label: string }> = [
   { step: 2, label: 'Character Generation' },
   { step: 3, label: 'Cut Plan' },
   { step: 4, label: 'Validation' },
-  { step: 5, label: 'Media Generation' },
+  { step: 5, label: 'Image Generation' },
 ];
 
 function statusLabel(status?: PipelineProgressEvent['status']): string {

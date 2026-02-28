@@ -4,7 +4,7 @@ export type WorkflowStep =
   | 'meta_prompt_2'
   | 'meta_prompt_3'
   | 'processing_state'
-  | 'video_export';
+  | 'result';
 
 export type StoryInputMode = 'summary' | 'original';
 
@@ -20,10 +20,10 @@ export interface MetaPromptModel {
 }
 
 export type VisualStyleId =
-  | 'cinematic_art'
-  | 'anime_2d'
-  | 'oil_painting'
-  | 'digital_sketch';
+  | 'webtoon_cel'
+  | 'cinematic_realism'
+  | 'watercolor_dream'
+  | 'digital_masterpaint';
 
 export interface VisualStyleOption {
   id: VisualStyleId;
@@ -52,95 +52,6 @@ export interface FrameSelection {
   generation: number;
 }
 
-export interface SourceFrame {
-  index: number;
-  imageUrl: string;
-  selectedOptionLabel: string;
-}
-
-export interface VideoSettings {
-  musicStyle: string;
-  transition: string;
-  duration: string;
-  format: string;
-}
-
-export interface VideoExportModel {
-  title: string;
-  subtitle: string;
-  previewImageUrl: string;
-  sourceFrames: SourceFrame[];
-  settings: VideoSettings;
-  renderSeconds: number;
-}
-
-export interface ProcessingState {
-  running: boolean;
-  errorMessage: string | null;
-}
-
-export interface AppWorkflowState {
-  step: WorkflowStep;
-  storyInput: StoryInputModel;
-  metaPrompt: MetaPromptModel;
-  selectedStyle: VisualStyleId | null;
-  frameSelections: FrameSelection[];
-  processing: ProcessingState;
-  videoExport: VideoExportModel | null;
-}
-
-export interface MockRenderPayload {
-  storyText: string;
-  metaPrompt: string;
-  style: VisualStyleId;
-  frameSelections: FrameSelection[];
-}
-
-export type WorkflowAction =
-  | { type: 'SET_STORY_TEXT'; payload: string }
-  | { type: 'SET_STORY_INPUT_MODE'; payload: StoryInputMode }
-  | { type: 'SET_META_DRAFT'; payload: string }
-  | { type: 'PUSH_META_HISTORY'; payload: string }
-  | {
-      type: 'APPLY_STYLE';
-      payload: {
-        style: VisualStyleId;
-        frameOptions: FrameOption[][];
-      };
-    }
-  | {
-      type: 'SELECT_FRAME_OPTION';
-      payload: {
-        frameIndex: number;
-        optionId: string;
-      };
-    }
-  | {
-      type: 'REGENERATE_FRAME_OPTIONS';
-      payload: {
-        frameIndex: number;
-        options: FrameOption[];
-      };
-    }
-  | { type: 'NEXT' }
-  | { type: 'BACK' }
-  | { type: 'START_PROCESSING' }
-  | { type: 'PROCESSING_SUCCESS'; payload: VideoExportModel }
-  | { type: 'PROCESSING_ERROR'; payload: string }
-  | { type: 'CLEAR_PROCESSING_ERROR' }
-  | { type: 'RESET' };
-
-export const WORKFLOW_STEPS: WorkflowStep[] = [
-  'story_input',
-  'meta_prompt_1',
-  'meta_prompt_2',
-  'meta_prompt_3',
-  'processing_state',
-  'video_export',
-];
-
-export type PipelineWorkflowStep = 'story_input' | 'processing_state' | 'result';
-
 export type PipelineOutputLanguage = 'ko' | 'en' | 'ja';
 
 export type PipelineStyleTemplate =
@@ -151,20 +62,6 @@ export type PipelineStyleTemplate =
   | 'manga_bw'
   | 'noir_graphic'
   | 'ghibli_pastoral';
-
-export interface PipelineStyleOption {
-  id: PipelineStyleTemplate;
-  title: string;
-  description: string;
-}
-
-export interface PipelineStoryInputModel {
-  manuscript: string;
-  genre: string;
-  tone: string;
-  outputLanguage: PipelineOutputLanguage;
-  styleTemplate: PipelineStyleTemplate;
-}
 
 export type PipelineProgressStatus = 'running' | 'completed' | 'failed';
 
@@ -214,31 +111,88 @@ export interface PipelineResultModel {
   reference_images: Record<string, string>;
 }
 
-export interface PipelineProcessingState {
+export interface PipelinePreviewCut {
+  cut_number: number;
+  styled_prompt: string;
+  reference_inputs: string[];
+}
+
+export interface PipelinePreviewModel {
+  cut_plan: {
+    cuts: Array<{
+      cut_number: number;
+      scene_ref: number;
+      description: string;
+      dialogue: string[];
+      narration: string;
+      camera_angle: string;
+      emotion: string;
+      image_prompt: string;
+    }>;
+  };
+  characters: { characters: PipelineCharacter[] };
+  anchor_prompt: string;
+  cuts: PipelinePreviewCut[];
+}
+
+export interface ProcessingState {
   running: boolean;
   errorMessage: string | null;
   runId: string | null;
   progressByStep: Record<number, PipelineProgressEvent>;
 }
 
-export interface PipelineWorkflowState {
-  step: PipelineWorkflowStep;
-  storyInput: PipelineStoryInputModel;
-  processing: PipelineProcessingState;
+export interface AppWorkflowState {
+  step: WorkflowStep;
+  storyInput: StoryInputModel;
+  metaPrompt: MetaPromptModel;
+  selectedStyle: VisualStyleId | null;
+  frameSelections: FrameSelection[];
+  processing: ProcessingState;
   result: PipelineResultModel | null;
 }
 
-export type PipelineWorkflowAction =
-  | { type: 'SET_MANUSCRIPT'; payload: string }
-  | { type: 'SET_GENRE'; payload: string }
-  | { type: 'SET_TONE'; payload: string }
-  | { type: 'SET_OUTPUT_LANGUAGE'; payload: PipelineOutputLanguage }
-  | { type: 'SET_STYLE_TEMPLATE'; payload: PipelineStyleTemplate }
+export type WorkflowAction =
+  | { type: 'SET_STORY_TEXT'; payload: string }
+  | { type: 'SET_STORY_INPUT_MODE'; payload: StoryInputMode }
+  | { type: 'SET_META_DRAFT'; payload: string }
+  | { type: 'PUSH_META_HISTORY'; payload: string }
+  | {
+      type: 'APPLY_STYLE';
+      payload: {
+        style: VisualStyleId;
+        frameOptions: FrameOption[][];
+      };
+    }
+  | {
+      type: 'SELECT_FRAME_OPTION';
+      payload: {
+        frameIndex: number;
+        optionId: string;
+      };
+    }
+  | {
+      type: 'REGENERATE_FRAME_OPTIONS';
+      payload: {
+        frameIndex: number;
+        options: FrameOption[];
+      };
+    }
+  | { type: 'NEXT' }
+  | { type: 'BACK' }
   | { type: 'START_PROCESSING' }
   | { type: 'SET_RUN_ID'; payload: string }
   | { type: 'UPDATE_PROGRESS'; payload: PipelineProgressEvent }
   | { type: 'PROCESSING_SUCCESS'; payload: PipelineResultModel }
   | { type: 'PROCESSING_ERROR'; payload: string }
   | { type: 'CLEAR_PROCESSING_ERROR' }
-  | { type: 'BACK_TO_INPUT' }
   | { type: 'RESET' };
+
+export const WORKFLOW_STEPS: WorkflowStep[] = [
+  'story_input',
+  'meta_prompt_1',
+  'meta_prompt_2',
+  'meta_prompt_3',
+  'processing_state',
+  'result',
+];
